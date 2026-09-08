@@ -539,4 +539,4 @@ else:
 # =========================================================
 
 st.markdown("---")
-st.caption("IndoHotel Executive Analytics | Powered by Streamlit + DuckDB + dbt")
+st.caption("Indonesia Hotel Executive Analytics | Supported by AJ.Prem")
