@@ -178,3 +178,22 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "🛏️ ห้องพักและการจอง",
     "📅 ปฏิบัติการและสถานที่"
 ])
+
+# =========================================================
+# TAB 1: REVENUE & PERFORMANCE
+# =========================================================
+
+with tab1:
+    st.markdown("### 📊 ภาพรวมรายได้และผลประกอบการ")
+
+    q1_df = conn.execute(
+        f"""
+        SELECT 
+            COALESCE(SUM(b.total_revenue), 0) AS total_rev,
+            COALESCE(SUM(b.nights), 0) AS total_nights
+        FROM main.fact_hotel_bookings b
+        JOIN main.dim_date d ON b.date_key = d.date_key
+        JOIN main.dim_property p ON b.property_key = p.property_key
+        {where_stmt}
+        """
+    ).df()
