@@ -291,3 +291,25 @@ with tab1:
         st.plotly_chart(clean_chart(fig_q3), use_container_width=True)
     else:
         st.info("ไม่พบข้อมูลบริการเสริม")
+
+    st.markdown("---")
+    st.markdown("**🏨 อัตราการเข้าพักเฉลี่ย (Occupancy Rate) แยกตามสาขา**")
+
+    q2_df = conn.execute(
+        f"""
+        SELECT p.property_name, AVG(f.occupancy_rate) * 100 AS avg_occ
+        FROM main.fact_daily_occupancy f
+        JOIN main.dim_property p ON f.property_key = p.property_key
+        JOIN main.dim_date d ON f.date_key = d.date_key
+        {where_stmt} GROUP BY p.property_name ORDER BY avg_occ DESC
+        """
+    ).df()
+
+    if not q2_df.empty:
+        q2_df["avg_occ"] = pd.to_numeric(q2_df["avg_occ"], errors="coerce").fillna(0)
+        fig_q2 = px.bar(q2_df, x="property_name", y="avg_occ", text="avg_occ", color="avg_occ", color_continuous_scale="Blues", range_y=[0, 100])
+        fig_q2.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+        fig_q2.update_layout(coloraxis_showscale=False)
+        st.plotly_chart(clean_chart(fig_q2), use_container_width=True)
+    else:
+        st.info("ไม่พบข้อมูล Occupancy Rate")    
