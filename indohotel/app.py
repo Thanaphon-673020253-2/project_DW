@@ -159,3 +159,11 @@ if selected_season != "ทั้งหมด":
     where_clauses.append(f"d.season = '{sql_escape(selected_season)}'")
 
 where_stmt = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+# =========================================================
+# MAIN HEADER
+# =========================================================
+
+st.title("🏨 INDONESIAN HOTEL GROUP OPERATIONS")
+st.caption("ระบบวิเคราะห์ข้อมูลเชิงยุทธศาสตร์ ครอบคลุมการดำเนินงานรอบด้านระดับองค์กร")
+st.markdown("---")
