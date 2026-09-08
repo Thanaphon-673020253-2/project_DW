@@ -532,4 +532,4 @@ if not q_event_type.empty:
             fig_evt_rev.update_layout(coloraxis_showscale=False, title="รายได้รวมแยกตามประเภท Event")
             st.plotly_chart(clean_chart(fig_evt_rev), use_container_width=True)
 else:
-        st.info("ไม่พบข้อมูลประเภทกิจกรรมจัดงานตามเงื่อนไขที่เลือก")
+        st.info("ไม่พบข้อมูลประเภทกิจกรรมจัดงานตามเงื่อนไข")
