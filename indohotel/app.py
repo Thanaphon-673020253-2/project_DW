@@ -345,7 +345,7 @@ with tab2:
             st.plotly_chart(clean_chart(fig_q5), use_container_width=True)
         else:
             st.info("ไม่พบข้อมูล Loyalty Tier")
-            
+
     with col_d:
         st.markdown("**🌍 สัญชาติลูกค้าที่มียอดจองสูงสุด Top 5**")
         q6_df = conn.execute(
@@ -367,4 +367,26 @@ with tab2:
             fig_q6.update_layout(yaxis=dict(autorange="reversed"), coloraxis_showscale=False)
             st.plotly_chart(clean_chart(fig_q6), use_container_width=True)
         else:
-            st.info("ไม่พบข้อมูลสัญชาติลูกค้า")            
+            st.info("ไม่พบข้อมูลสัญชาติลูกค้า")
+
+    st.markdown("---")
+    col_e, col_f = st.columns(2, gap="large")
+
+    with col_e:
+        st.markdown("**🥗 เปรียบเทียบการใช้บริการ Food และ Spa (ในประเทศ vs ต่างชาติ)**")
+        q8_df = conn.execute(
+            f"""
+            SELECT 'Food' AS service_type, CASE WHEN g.is_domestic = TRUE THEN 'ในประเทศ (Domestic)' ELSE 'ต่างชาติ (International)' END AS guest_type, COUNT(*) AS service_count
+            FROM main.fact_fnb_operations f JOIN main.dim_guest g ON f.guest_key = g.guest_key JOIN main.dim_date d ON f.date_key = d.date_key JOIN main.dim_property p ON f.property_key = p.property_key {where_stmt} AND f.sales_amount > 0 GROUP BY 1, 2
+            UNION ALL
+            SELECT 'Spa' AS service_type, CASE WHEN g.is_domestic = TRUE THEN 'ในประเทศ (Domestic)' ELSE 'ต่างชาติ (International)' END AS guest_type, COUNT(*) AS service_count
+            FROM main.fact_ancillary_services a JOIN main.dim_guest g ON a.guest_key = g.guest_key JOIN main.dim_date d ON a.date_key = d.date_key JOIN main.dim_property p ON a.property_key = p.property_key {where_stmt} AND a.spa_revenue > 0 GROUP BY 1, 2
+            """
+        ).df()
+
+        if not q8_df.empty:
+            fig_q8 = px.bar(q8_df, x="service_type", y="service_count", color="guest_type", barmode="group", text="service_count", color_discrete_sequence=["#38bdf8", "#fb7185"])
+            fig_q8.update_traces(texttemplate="%{text:,.0f}", textposition="outside")
+            st.plotly_chart(clean_chart(fig_q8), use_container_width=True)
+        else:
+            st.info("ไม่พบข้อมูลการใช้บริการ Spa และ Food")
