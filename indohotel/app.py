@@ -344,4 +344,27 @@ with tab2:
             fig_q5.update_layout(coloraxis_showscale=False)
             st.plotly_chart(clean_chart(fig_q5), use_container_width=True)
         else:
-            st.info("ไม่พบข้อมูล Loyalty Tier")    
+            st.info("ไม่พบข้อมูล Loyalty Tier")
+            
+    with col_d:
+        st.markdown("**🌍 สัญชาติลูกค้าที่มียอดจองสูงสุด Top 5**")
+        q6_df = conn.execute(
+            f"""
+            SELECT g.nationality, COUNT(b.booking_id) AS bookings
+            FROM main.fact_hotel_bookings b
+            JOIN main.dim_guest g ON b.guest_key = g.guest_key
+            JOIN main.dim_property p ON b.property_key = p.property_key
+            JOIN main.dim_date d ON b.date_key = d.date_key
+            {where_stmt}
+            AND g.nationality IS NOT NULL AND TRIM(g.nationality) <> '' AND LOWER(TRIM(g.nationality)) <> 'others'
+            GROUP BY g.nationality ORDER BY bookings DESC LIMIT 5
+            """
+        ).df()
+
+        if not q6_df.empty:
+            fig_q6 = px.bar(q6_df, x="bookings", y="nationality", orientation="h", text="bookings", color="bookings", color_continuous_scale="Tealgrn")
+            fig_q6.update_traces(texttemplate="%{text:,.0f} รายการ", textposition="outside")
+            fig_q6.update_layout(yaxis=dict(autorange="reversed"), coloraxis_showscale=False)
+            st.plotly_chart(clean_chart(fig_q6), use_container_width=True)
+        else:
+            st.info("ไม่พบข้อมูลสัญชาติลูกค้า")            
