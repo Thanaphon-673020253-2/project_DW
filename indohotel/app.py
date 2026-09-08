@@ -198,21 +198,6 @@ with tab1:
         """
     ).df()
 
-    with tab1:
-    st.markdown("### 📊 ภาพรวมรายได้และผลประกอบการ")
-
-    q1_df = conn.execute(
-        f"""
-        SELECT 
-            COALESCE(SUM(b.total_revenue), 0) AS total_rev,
-            COALESCE(SUM(b.nights), 0) AS total_nights
-        FROM main.fact_hotel_bookings b
-        JOIN main.dim_date d ON b.date_key = d.date_key
-        JOIN main.dim_property p ON b.property_key = p.property_key
-        {where_stmt}
-        """
-    ).df()
-
     total_rev = safe_number(q1_df.loc[0, "total_rev"]) if not q1_df.empty else 0
     total_nights = safe_number(q1_df.loc[0, "total_nights"]) if not q1_df.empty else 0
 
@@ -270,64 +255,3 @@ with tab1:
             st.plotly_chart(clean_chart(fig_q14), use_container_width=True)
         else:
             st.info("ไม่พบข้อมูลสัดส่วนวันธรรมดา/วันหยุด")
-
-    st.markdown("---")
-    st.markdown("**🛎️ สัดส่วนรายได้และผู้ใช้บริการเสริมแยกตามประเภทบริการ**")
-
-    q3_df = conn.execute(
-        f"""
-        SELECT 'Food & Beverage' AS service_type, COALESCE(SUM(f.sales_amount), 0) AS revenue, COUNT(DISTINCT f.guest_key) AS guest_count
-        FROM main.fact_fnb_operations f JOIN main.dim_date d ON f.date_key = d.date_key JOIN main.dim_property p ON f.property_key = p.property_key {where_stmt}
-        UNION ALL
-        SELECT 'Spa & Wellness' AS service_type, COALESCE(SUM(a.spa_revenue), 0) AS revenue, COUNT(DISTINCT CASE WHEN a.spa_revenue > 0 THEN a.guest_key END) AS guest_count
-        FROM main.fact_ancillary_services a JOIN main.dim_date d ON a.date_key = d.date_key JOIN main.dim_property p ON a.property_key = p.property_key {where_stmt}
-        UNION ALL
-        SELECT 'Event & Venue' AS service_type, COALESCE(SUM(a.event_revenue), 0) AS revenue, COUNT(CASE WHEN a.event_revenue > 0 THEN 1 END) AS guest_count
-        FROM main.fact_ancillary_services a JOIN main.dim_date d ON a.date_key = d.date_key JOIN main.dim_property p ON a.property_key = p.property_key {where_stmt}
-        ORDER BY revenue DESC
-        """
-    ).df()
-
-    if not q3_df.empty:
-        m1, m2, m3 = st.columns(3, gap="medium")
-        metric_cols = [m1, m2, m3]
-        for idx, row in q3_df.iterrows():
-            if idx >= 3:
-                break
-            rev_b = safe_number(row["revenue"]) / 1e9
-            g_count = int(safe_number(row["guest_count"]))
-            unit_label = "รายการจัดงาน" if row["service_type"] == "Event & Venue" else "ผู้ใช้บริการ"
-            metric_cols[idx].metric(f"บริการ {row['service_type']}", f"Rp {rev_b:,.2f}B", f"{g_count:,} {unit_label}")
-
-        q3_df["revenue_b"] = pd.to_numeric(q3_df["revenue"], errors="coerce").fillna(0) / 1e9
-        fig_q3 = px.bar(q3_df, x="service_type", y="revenue_b", text="revenue_b", color="service_type", color_discrete_sequence=["#2563eb", "#38bdf8", "#93c5fd"])
-        fig_q3.update_traces(texttemplate="Rp %{y:.2f}B", textposition="outside")
-        fig_q3.update_layout(showlegend=False)
-        st.plotly_chart(clean_chart(fig_q3), use_container_width=True)
-    else:
-        st.info("ไม่พบข้อมูลบริการเสริม")
-
-    st.markdown("---")
-    st.markdown("**🏨 อัตราการเข้าพักเฉลี่ย (Occupancy Rate) แยกตามสาขา**")
-
-    q2_df = conn.execute(
-        f"""
-        SELECT p.property_name, AVG(f.occupancy_rate) * 100 AS avg_occ
-        FROM main.fact_daily_occupancy f
-        JOIN main.dim_property p ON f.property_key = p.property_key
-        JOIN main.dim_date d ON f.date_key = d.date_key
-        {where_stmt} GROUP BY p.property_name ORDER BY avg_occ DESC
-        """
-    ).df()
-
-    if not q2_df.empty:
-        q2_df["avg_occ"] = pd.to_numeric(q2_df["avg_occ"], errors="coerce").fillna(0)
-        fig_q2 = px.bar(q2_df, x="property_name", y="avg_occ", text="avg_occ", color="avg_occ", color_continuous_scale="Blues", range_y=[0, 100])
-        fig_q2.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-        fig_q2.update_layout(coloraxis_showscale=False)
-        st.plotly_chart(clean_chart(fig_q2), use_container_width=True)
-    else:
-        st.info("ไม่พบข้อมูล Occupancy Rate")
-
-
-    
