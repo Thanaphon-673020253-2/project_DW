@@ -197,3 +197,16 @@ with tab1:
         {where_stmt}
         """
     ).df()
+
+    total_rev = safe_number(q1_df.loc[0, "total_rev"]) if not q1_df.empty else 0
+    total_nights = safe_number(q1_df.loc[0, "total_nights"]) if not q1_df.empty else 0
+
+    c1, c2 = st.columns(2, gap="medium")
+    with c1:
+        st.metric("ยอดขายรวม (Total Revenue)", f"Rp {total_rev:,.0f}")
+    with c2:
+        st.metric("จำนวนคืนที่จอง (Nights)", f"{total_nights:,.0f} คืน")
+
+    st.markdown("---")
+
+    col_i, col_j = st.columns(2, gap="large")
