@@ -321,4 +321,27 @@ with tab1:
 with tab2:
     st.markdown("### 👥 การวิเคราะห์ลูกค้าและพฤติกรรม")
 
-    col_c, col_d = st.columns(2, gap="large")    
+    col_c, col_d = st.columns(2, gap="large")
+
+    with col_c:
+        st.markdown("**🥇 ค่าเฉลี่ยการเข้าพักซ้ำตามระดับ Loyalty Tier**")
+        q5_df = conn.execute(
+            f"""
+            SELECT 
+                CASE WHEN g.loyalty_tier IS NULL OR LOWER(TRIM(g.loyalty_tier)) = 'none' THEN 'Non-Member' ELSE g.loyalty_tier END AS loyalty_tier,
+                COUNT(b.booking_id) * 1.0 / NULLIF(COUNT(DISTINCT g.guest_key), 0) AS repeat_rate
+            FROM main.fact_hotel_bookings b
+            LEFT JOIN main.dim_guest g ON b.guest_key = g.guest_key
+            JOIN main.dim_property p ON b.property_key = p.property_key
+            JOIN main.dim_date d ON b.date_key = d.date_key
+            {where_stmt} GROUP BY 1 ORDER BY repeat_rate DESC
+            """
+        ).df()
+
+        if not q5_df.empty:
+            fig_q5 = px.bar(q5_df, x="loyalty_tier", y="repeat_rate", text="repeat_rate", color="repeat_rate", color_continuous_scale="Purples")
+            fig_q5.update_traces(texttemplate="%{text:.2f} ครั้ง", textposition="outside")
+            fig_q5.update_layout(coloraxis_showscale=False)
+            st.plotly_chart(clean_chart(fig_q5), use_container_width=True)
+        else:
+            st.info("ไม่พบข้อมูล Loyalty Tier")    
