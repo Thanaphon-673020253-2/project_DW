@@ -1,3 +1,16 @@
 .venv/
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# dbt
+target/
+dbt_packages/
+logs/
+
+# DuckDB database files
 *.duckdb
 *.duckdb.wal
+
+*.user.yml
