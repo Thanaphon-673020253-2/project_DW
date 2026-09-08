@@ -533,3 +533,10 @@ if not q_event_type.empty:
             st.plotly_chart(clean_chart(fig_evt_rev), use_container_width=True)
 else:
         st.info("ไม่พบข้อมูลประเภทกิจกรรมจัดงานตามเงื่อนไข")
+
+# =========================================================
+# FOOTER
+# =========================================================
+
+st.markdown("---")
+st.caption("IndoHotel Executive Analytics | Powered by Streamlit + DuckDB + dbt")
