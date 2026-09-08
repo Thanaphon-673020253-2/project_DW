@@ -494,3 +494,42 @@ q15_df = conn.execute(
         {where_stmt} GROUP BY 1 ORDER BY booking_count DESC
         """
     ).df()
+
+if not q15_df.empty and q15_df["booking_count"].notna().any():
+            fig_q15 = px.bar(q15_df, x="venue_type", y="booking_count", text="booking_count", color="booking_count", color_continuous_scale="Viridis")
+            fig_q15.update_traces(texttemplate="%{text:,} ครั้ง", textposition="outside")
+            fig_q15.update_layout(coloraxis_showscale=False)
+            st.plotly_chart(clean_chart(fig_q15), use_container_width=True)
+else:
+            st.info("ไม่พบข้อมูล Venue Performance")
+
+st.markdown("---")
+st.markdown("**📋 รายละเอียดประเภทกิจกรรมจัดงาน (Event Type Breakdown)**")
+
+q_event_type = conn.execute(
+        f"""
+        SELECT COALESCE(e.event_type_name, 'Unknown') AS event_type, COUNT(*) AS total_bookings, COALESCE(SUM(a.event_revenue), 0) / 1e9 AS rev_billions
+        FROM main.fact_ancillary_services a
+        LEFT JOIN main.dim_event_type e ON a.event_type_key = e.event_type_key
+        JOIN main.dim_date d ON a.date_key = d.date_key
+        JOIN main.dim_property p ON a.property_key = p.property_key
+        {where_stmt} AND a.event_revenue > 0 GROUP BY 1 ORDER BY total_bookings DESC
+        """
+    ).df()
+
+if not q_event_type.empty:
+        col_m, col_n = st.columns(2, gap="large")
+
+        with col_m:
+            fig_evt_count = px.bar(q_event_type, x="event_type", y="total_bookings", text="total_bookings", color="total_bookings", color_continuous_scale="Blues")
+            fig_evt_count.update_traces(texttemplate="%{text:,} ครั้ง", textposition="outside")
+            fig_evt_count.update_layout(coloraxis_showscale=False, title="จำนวนครั้งที่จัดแยกตามประเภท Event")
+            st.plotly_chart(clean_chart(fig_evt_count), use_container_width=True)
+
+        with col_n:
+            fig_evt_rev = px.bar(q_event_type, x="event_type", y="rev_billions", text="rev_billions", color="rev_billions", color_continuous_scale="YlGnBu")
+            fig_evt_rev.update_traces(texttemplate="Rp %{y:.2f}B", textposition="outside")
+            fig_evt_rev.update_layout(coloraxis_showscale=False, title="รายได้รวมแยกตามประเภท Event")
+            st.plotly_chart(clean_chart(fig_evt_rev), use_container_width=True)
+else:
+        st.info("ไม่พบข้อมูลประเภทกิจกรรมจัดงานตามเงื่อนไขที่เลือก")
