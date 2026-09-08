@@ -409,4 +409,24 @@ with tab2:
             fig_q11.update_layout(coloraxis_showscale=False)
             st.plotly_chart(clean_chart(fig_q11), use_container_width=True)
         else:
-            st.info("ไม่พบข้อมูลระยะเวลาเข้าพักเฉลี่ย")        
+            st.info("ไม่พบข้อมูลระยะเวลาเข้าพักเฉลี่ย") 
+
+
+# =========================================================
+# TAB 3: ROOM & BOOKING PATTERNS
+# =========================================================
+
+with tab3:
+    st.markdown("### 🛏️ ประเภทห้องพักและพฤติกรรมการจอง")
+
+    q10_df = conn.execute(
+        f"""
+        SELECT AVG(b.lead_time_days) AS avg_lead
+        FROM main.fact_hotel_bookings b
+        JOIN main.dim_property p ON b.property_key = p.property_key
+        JOIN main.dim_date d ON b.date_key = d.date_key
+        {where_stmt}
+        """
+    ).df()
+    lead_val = safe_number(q10_df.loc[0, "avg_lead"]) if not q10_df.empty else 0
+    st.metric("ระยะเวลาการจองล่วงหน้าเฉลี่ย (Lead Time)", f"{lead_val:,.1f} วัน")
