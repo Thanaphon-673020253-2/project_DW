@@ -390,3 +390,23 @@ with tab2:
             st.plotly_chart(clean_chart(fig_q8), use_container_width=True)
         else:
             st.info("ไม่พบข้อมูลการใช้บริการ Spa และ Food")
+
+    with col_f:
+        st.markdown("**🛌 ระยะเวลาเข้าพักเฉลี่ย (Nights Stayed) ตามสาขาโรงแรม**")
+        q11_df = conn.execute(
+            f"""
+            SELECT p.property_name, AVG(b.nights) AS avg_nights
+            FROM main.fact_hotel_bookings b
+            JOIN main.dim_property p ON b.property_key = p.property_key
+            JOIN main.dim_date d ON b.date_key = d.date_key
+            {where_stmt} GROUP BY p.property_name ORDER BY avg_nights DESC
+            """
+        ).df()
+
+        if not q11_df.empty:
+            fig_q11 = px.bar(q11_df, x="property_name", y="avg_nights", text="avg_nights", color="avg_nights", color_continuous_scale="Oranges")
+            fig_q11.update_traces(texttemplate="%{text:.1f} คืน", textposition="outside")
+            fig_q11.update_layout(coloraxis_showscale=False)
+            st.plotly_chart(clean_chart(fig_q11), use_container_width=True)
+        else:
+            st.info("ไม่พบข้อมูลระยะเวลาเข้าพักเฉลี่ย")        
