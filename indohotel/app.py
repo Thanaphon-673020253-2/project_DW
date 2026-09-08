@@ -61,3 +61,35 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
+# =========================================================
+# HELPER FUNCTIONS
+# =========================================================
+
+def clean_chart(fig):
+    """
+    ปรับรูปแบบกราฟให้โปร่งใส เพื่อให้กลมกลืนไปกับทั้ง Theme ขาวและดำอัตโนมัติ
+    """
+    fig.update_layout(
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(showgrid=False, title=""),
+        yaxis=dict(showgrid=True, gridcolor="rgba(128,128,128,0.15)", title=""),
+        margin=dict(t=40, b=20, l=20, r=20),
+        font=dict(family="Inter, sans-serif", size=12),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None)
+    )
+    return fig
+
+
+def sql_escape(value):
+    return str(value).replace("'", "''")
+
+
+def safe_number(value, default=0):
+    try:
+        if pd.isna(value):
+            return default
+        return float(value)
+    except Exception:
+        return default
