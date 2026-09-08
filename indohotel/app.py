@@ -141,3 +141,21 @@ with st.sidebar:
     seasons_df = conn.execute("SELECT DISTINCT season FROM main.dim_date WHERE season IS NOT NULL ORDER BY season").df()
     season_options = ["ทั้งหมด"] + (seasons_df["season"].dropna().astype(str).tolist() if not seasons_df.empty else [])
     selected_season = st.selectbox("🌤️ เลือกฤดูกาล", season_options)
+
+# =========================================================
+# GLOBAL SQL FILTER
+# =========================================================
+
+where_clauses = []
+if selected_year != "ทั้งหมด":
+    where_clauses.append(f"d.year = {int(selected_year)}")
+else:
+    where_clauses.append("d.year BETWEEN 2023 AND 2026")
+
+if selected_property != "ทั้งหมด":
+    where_clauses.append(f"p.property_name = '{sql_escape(selected_property)}'")
+
+if selected_season != "ทั้งหมด":
+    where_clauses.append(f"d.season = '{sql_escape(selected_season)}'")
+
+where_stmt = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
