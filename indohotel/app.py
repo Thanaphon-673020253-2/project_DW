@@ -447,3 +447,32 @@ with tab3:
             """
         ).df()
 
+        if not q9_df.empty and q9_df["revenue_b"].notna().any():
+            fig_q9 = px.bar(q9_df, x="room_type", y="revenue_b", text="bookings", color="revenue_b", color_continuous_scale="Greens")
+            fig_q9.update_traces(texttemplate="Rp %{y:.2f}B (%{text:,} จอง)", textposition="outside")
+            fig_q9.update_layout(coloraxis_showscale=False)
+            st.plotly_chart(clean_chart(fig_q9), use_container_width=True)
+        else:
+            st.warning("⚠️ ไม่พบข้อมูลประเภทห้องพักตามเงื่อนไขที่เลือก")
+
+    with col_h:
+        st.markdown("**❌ อัตราการยกเลิกการจอง (%) แยกตามประเภทห้องพัก**")
+        q12_df = conn.execute(
+            f"""
+            SELECT COALESCE(r.room_type, b.room_type, 'Unknown') AS room_type, AVG(CAST(b.is_canceled AS INTEGER)) * 100 AS cancel_rate
+            FROM main.fact_hotel_bookings b
+            LEFT JOIN main.dim_room r ON b.room_key = r.room_key
+            JOIN main.dim_property p ON b.property_key = p.property_key
+            JOIN main.dim_date d ON b.date_key = d.date_key
+            {where_stmt} GROUP BY 1 ORDER BY cancel_rate DESC
+            """
+        ).df()
+
+        if not q12_df.empty and q12_df["cancel_rate"].notna().any():
+            fig_q12 = px.bar(q12_df, x="room_type", y="cancel_rate", text="cancel_rate", color="cancel_rate", color_continuous_scale="Reds")
+            fig_q12.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+            fig_q12.update_layout(coloraxis_showscale=False)
+            st.plotly_chart(clean_chart(fig_q12), use_container_width=True)
+        else:
+            st.warning("⚠️ ไม่พบข้อมูลอัตราการยกเลิกตามเงื่อนไขที่เลือก")
+
