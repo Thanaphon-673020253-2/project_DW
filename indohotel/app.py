@@ -93,3 +93,31 @@ def safe_number(value, default=0):
         return float(value)
     except Exception:
         return default
+
+# =========================================================
+# DATABASE CONNECTION
+# =========================================================
+
+@st.cache_resource
+def get_connection():
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    possible_paths = [
+        os.path.join(base_dir, "indohotel", "dev.duckdb"),
+        os.path.join(base_dir, "dev.duckdb")
+    ]
+    db_path = next((path for path in possible_paths if os.path.exists(path)), None)
+
+    if db_path is None:
+        st.error("❌ ไม่พบไฟล์ฐานข้อมูล dev.duckdb\n\nกรุณาตรวจสอบว่าไฟล์อยู่ที่: `indohotel/dev.duckdb`")
+        st.stop()
+
+    try:
+        conn = duckdb.connect(db_path, read_only=True)
+        conn.execute("SET search_path = 'main';")
+        return conn
+    except Exception as e:
+        st.error(f"❌ ไม่สามารถเชื่อมต่อ DuckDB ได้\n\n{e}")
+        st.stop()
+
+
+conn = get_connection()
