@@ -312,4 +312,13 @@ with tab1:
         fig_q2.update_layout(coloraxis_showscale=False)
         st.plotly_chart(clean_chart(fig_q2), use_container_width=True)
     else:
-        st.info("ไม่พบข้อมูล Occupancy Rate")    
+        st.info("ไม่พบข้อมูล Occupancy Rate")
+
+# =========================================================
+# TAB 2: CUSTOMER ANALYSIS
+# =========================================================
+
+with tab2:
+    st.markdown("### 👥 การวิเคราะห์ลูกค้าและพฤติกรรม")
+
+    col_c, col_d = st.columns(2, gap="large")    
