@@ -484,3 +484,13 @@ with tab4:
     st.markdown("### 📅 ปฏิบัติการและสถานที่จัดงานประชุม")
     st.markdown("**🏢 ประเภทสถานที่จัดงาน (Venue Type) ที่มีการจองสูงสุด**")
 
+q15_df = conn.execute(
+        f"""
+        SELECT COALESCE(v.venue_type) AS venue_type, COUNT(CASE WHEN a.event_revenue > 0 THEN 1 END) AS booking_count, COALESCE(SUM(a.event_revenue), 0) / 1e9 AS rev_billions
+        FROM main.fact_ancillary_services a
+        LEFT JOIN main.dim_venue v ON a.venue_key = v.venue_key
+        JOIN main.dim_property p ON a.property_key = p.property_key
+        JOIN main.dim_date d ON a.date_key = d.date_key
+        {where_stmt} GROUP BY 1 ORDER BY booking_count DESC
+        """
+    ).df()
