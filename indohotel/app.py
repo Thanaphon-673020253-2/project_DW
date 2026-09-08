@@ -430,3 +430,20 @@ with tab3:
     ).df()
     lead_val = safe_number(q10_df.loc[0, "avg_lead"]) if not q10_df.empty else 0
     st.metric("ระยะเวลาการจองล่วงหน้าเฉลี่ย (Lead Time)", f"{lead_val:,.1f} วัน")
+
+    st.markdown("---")
+    col_g, col_h = st.columns(2, gap="large")
+
+    with col_g:
+        st.markdown("**💰 ประเภทห้องพักที่สร้างรายได้หลักสูงสุด**")
+        q9_df = conn.execute(
+            f"""
+            SELECT COALESCE(r.room_type, b.room_type, 'Unknown') AS room_type, COUNT(b.booking_id) AS bookings, COALESCE(SUM(b.total_revenue), 0) / 1e9 AS revenue_b
+            FROM main.fact_hotel_bookings b
+            LEFT JOIN main.dim_room r ON b.room_key = r.room_key
+            JOIN main.dim_property p ON b.property_key = p.property_key
+            JOIN main.dim_date d ON b.date_key = d.date_key
+            {where_stmt} GROUP BY 1 ORDER BY revenue_b DESC
+            """
+        ).df()
+
