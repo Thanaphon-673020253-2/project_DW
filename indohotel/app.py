@@ -121,3 +121,23 @@ def get_connection():
 
 
 conn = get_connection()
+
+# =========================================================
+# SIDEBAR FILTERS
+# =========================================================
+
+with st.sidebar:
+    st.markdown("### 🎛️ ตัวกรองข้อมูล")
+    st.markdown("---")
+
+    years_df = conn.execute("SELECT DISTINCT year FROM main.dim_date WHERE year BETWEEN 2023 AND 2026 ORDER BY year DESC").df()
+    year_options = ["ทั้งหมด"] + ([str(int(y)) for y in years_df["year"]] if not years_df.empty else [])
+    selected_year = st.selectbox("📅 เลือกปี", year_options)
+
+    properties_df = conn.execute("SELECT DISTINCT property_name FROM main.dim_property WHERE property_name IS NOT NULL ORDER BY property_name").df()
+    property_options = ["ทั้งหมด"] + (properties_df["property_name"].dropna().astype(str).tolist() if not properties_df.empty else [])
+    selected_property = st.selectbox("🏨 เลือกสาขา", property_options)
+
+    seasons_df = conn.execute("SELECT DISTINCT season FROM main.dim_date WHERE season IS NOT NULL ORDER BY season").df()
+    season_options = ["ทั้งหมด"] + (seasons_df["season"].dropna().astype(str).tolist() if not seasons_df.empty else [])
+    selected_season = st.selectbox("🌤️ เลือกฤดูกาล", season_options)
