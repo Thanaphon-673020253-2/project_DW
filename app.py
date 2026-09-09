@@ -1,4 +1,5 @@
 import os
+import subprocess
 import duckdb
 import pandas as pd
 import plotly.express as px
@@ -95,7 +96,7 @@ def safe_number(value, default=0):
         return default
 
 # =========================================================
-# DATABASE CONNECTION
+# DATABASE AUTO-BUILD & CONNECTION (STREAMLIT CLOUD SUPPORT)
 # =========================================================
 
 @st.cache_resource
@@ -107,9 +108,20 @@ def get_connection():
     ]
     db_path = next((path for path in possible_paths if os.path.exists(path)), None)
 
+    # หากรันบน Cloud แล้วยังไม่มีไฟล์ DuckDB ให้สั่งรัน dbt run อัตโนมัติ
     if db_path is None:
-        st.error("❌ ไม่พบไฟล์ฐานข้อมูล dev.duckdb\n\nกรุณาตรวจสอบว่าไฟล์อยู่ที่: `indohotel/dev.duckdb`")
-        st.stop()
+        with st.spinner("⏳ กำลังเตรียมฐานข้อมูลคลังข้อมูล (รัน dbt pipeline ครั้งแรก)..."):
+            try:
+                result = subprocess.run(["dbt", "run"], capture_output=True, text=True, cwd=base_dir)
+                if result.returncode != 0:
+                    st.error(f"❌ เกิดข้อผิดพลาดในการรัน dbt:\n\n{result.stderr}")
+                    st.stop()
+            except Exception as e:
+                st.error(f"❌ ไม่สามารถรันคำสั่ง dbt ได้:\n\n{e}")
+                st.stop()
+            
+            # ตรวจสอบหาไฟล์ฐานข้อมูลอีกครั้งหลังรัน dbt สำเร็จ
+            db_path = next((path for path in possible_paths if os.path.exists(path)), os.path.join(base_dir, "dev.duckdb"))
 
     try:
         conn = duckdb.connect(db_path, read_only=True)
