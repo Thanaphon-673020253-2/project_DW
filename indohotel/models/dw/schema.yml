@@ -1,0 +1,350 @@
+version: 2
+
+models:
+  # ==========================================
+  # DIMENSION TABLES (ตารางมิติ)
+  # ==========================================
+  - name: dim_date
+    description: "Date dimension table containing calendar attributes, seasonal classifications, and weekend flags."
+    columns:
+      - name: date_key
+        description: "Surrogate primary key for date (YYYYMMDD format as integer)."
+        data_type: integer
+        tests:
+          - unique
+          - not_null
+      - name: full_date
+        description: "The actual calendar date."
+        data_type: date
+        tests:
+          - unique
+          - not_null
+      - name: day_of_week
+        description: "Day of the week name."
+        data_type: string
+      - name: month_name
+        description: "Full month name."
+        data_type: string
+      - name: quarter
+        description: "Calendar quarter."
+        data_type: string
+      - name: year
+        description: "Four-digit calendar year."
+        data_type: integer
+      - name: is_weekend
+        description: "Boolean flag for weekend."
+        data_type: boolean
+      - name: season
+        description: "Seasonal classification."
+        data_type: string
+
+  - name: dim_property
+    description: "Property dimension table containing hotel/resort master attributes."
+    columns:
+      - name: property_key
+        description: "Surrogate primary key for property."
+        data_type: string
+        tests:
+          - unique
+          - not_null
+      - name: property_id
+        description: "Business key from source system."
+        data_type: string
+        tests:
+          - not_null
+      - name: property_name
+        description: "Name of the hotel or property."
+        data_type: string
+      - name: city
+        description: "City location."
+        data_type: string
+      - name: region
+        description: "Region location."
+        data_type: string
+      - name: star_rating
+        description: "Star rating."
+        data_type: integer
+      - name: total_rooms
+        description: "Total rooms."
+        data_type: integer
+
+  - name: dim_guest
+    description: "Guest dimension table."
+    columns:
+      - name: guest_key
+        description: "Surrogate primary key for guest."
+        data_type: string
+        tests:
+          - unique
+          - not_null
+      - name: guest_id
+        description: "Business key for guest."
+        data_type: string
+        tests:
+          - not_null
+      - name: full_name
+        description: "Guest full name."
+        data_type: string
+      - name: nationality
+        description: "Guest nationality."
+        data_type: string
+      - name: is_domestic
+        description: "Boolean flag for domestic guest."
+        data_type: boolean
+      - name: loyalty_tier
+        description: "Loyalty tier."
+        data_type: string
+      - name: registered_date
+        description: "Registration date."
+        data_type: date
+
+  - name: dim_room
+    description: "Room dimension table."
+    columns:
+      - name: room_key
+        description: "Surrogate primary key for room."
+        data_type: string
+        tests:
+          - unique
+          - not_null
+      - name: room_id
+        description: "Business key for room."
+        data_type: string
+        tests:
+          - not_null
+      - name: room_number
+        description: "Room number."
+        data_type: string
+      - name: room_type
+        description: "Room type."
+        data_type: string
+      - name: floor
+        description: "Floor number."
+        data_type: integer
+
+  - name: dim_employee
+    description: "Employee dimension table."
+    columns:
+      - name: employee_key
+        description: "Surrogate primary key for employee."
+        data_type: string
+        tests:
+          - unique
+          - not_null
+      - name: employee_id
+        description: "Business key for employee."
+        data_type: string
+        tests:
+          - not_null
+      - name: full_name
+        description: "Employee full name."
+        data_type: string
+      - name: role_title
+        description: "Job title."
+        data_type: string
+      - name: department
+        description: "Department."
+        data_type: string
+
+  - name: dim_fnb_outlet
+    description: "Food & Beverage outlet dimension table."
+    columns:
+      - name: outlet_key
+        description: "Surrogate primary key for outlet."
+        data_type: string
+        tests:
+          - unique
+          - not_null
+      - name: outlet_id
+        description: "Business key for outlet."
+        data_type: string
+        tests:
+          - not_null
+      - name: outlet_name
+        description: "Outlet name."
+        data_type: string
+      - name: outlet_type
+        description: "Outlet type."
+        data_type: string
+      - name: property_id
+        description: "Property ID."
+        data_type: string
+
+  - name: dim_venue
+    description: "Venue dimension table."
+    columns:
+      - name: venue_key
+        description: "Surrogate primary key for venue."
+        data_type: string
+        tests:
+          - unique
+          - not_null
+      - name: venue_id
+        description: "Business key for venue."
+        data_type: string
+        tests:
+          - not_null
+      - name: venue_name
+        description: "Venue name."
+        data_type: string
+      - name: venue_type
+        description: "Venue type."
+        data_type: string
+      - name: max_capacity
+        description: "Max capacity."
+        data_type: integer
+      - name: area_sqm
+        description: "Area in square meters."
+        data_type: float
+
+  - name: dim_event_type
+    description: "Event type dimension table."
+    columns:
+      - name: event_type_key
+        description: "Surrogate primary key for event type."
+        data_type: string
+        tests:
+          - unique
+          - not_null
+      - name: event_type_name
+        description: "Event type name."
+        data_type: string
+
+  # ==========================================
+  # FACT TABLES (ตารางข้อเท็จจริง)
+  # ==========================================
+  - name: fact_hotel_bookings
+    description: "Fact table recording hotel bookings, revenues, and stays."
+    columns:
+      - name: booking_id
+        description: "Booking transaction identifier."
+        data_type: string
+      - name: date_key
+        description: "Foreign key to dim_date."
+        data_type: integer
+      - name: property_key
+        description: "Foreign key to dim_property."
+        data_type: string
+      - name: guest_key
+        description: "Foreign key to dim_guest."
+        data_type: string
+      - name: room_key
+        description: "Foreign key to dim_room."
+        data_type: string
+      - name: room_type
+        description: "Room type descriptor."
+        data_type: string
+      - name: booking_channel
+        description: "Booking channel."
+        data_type: string
+      - name: booking_amount
+        description: "Booking amount."
+        data_type: float
+      - name: discount_amount
+        description: "Discount amount."
+        data_type: float
+      - name: total_revenue
+        description: "Total calculated revenue."
+        data_type: float
+      - name: nights
+        description: "Nights stayed."
+        data_type: integer
+      - name: room_count
+        description: "Room count."
+        data_type: integer
+      - name: lead_time_days
+        description: "Lead time days."
+        data_type: integer
+      - name: is_canceled
+        description: "Cancellation flag."
+        data_type: boolean
+      - name: is_checked_in
+        description: "Check-in flag."
+        data_type: boolean
+      - name: ingestion_timestamp
+        description: "Ingestion timestamp."
+        data_type: timestamp
+
+  - name: fact_fnb_operations
+    description: "Fact table recording F&B operations."
+    columns:
+      - name: date_key
+        data_type: integer
+      - name: property_key
+        data_type: string
+      - name: guest_key
+        data_type: string
+      - name: outlet_key
+        data_type: string
+      - name: employee_key
+        data_type: string
+      - name: sales_amount
+        data_type: float
+      - name: cost_of_goods_sold
+        data_type: float
+      - name: waste_cost
+        data_type: float
+      - name: transaction_count
+        data_type: integer
+
+  - name: fact_hotel_operations_hr
+    description: "Fact table for HR and operations."
+    columns:
+      - name: date_key
+        data_type: integer
+      - name: property_key
+        data_type: string
+      - name: employee_key
+        data_type: string
+      - name: room_key
+        data_type: string
+      - name: payroll_amount
+        data_type: float
+      - name: performance_score
+        data_type: float
+      - name: maintenance_cost
+        data_type: float
+      - name: maintenance_ticket_count
+        data_type: integer
+
+  - name: fact_ancillary_services
+    description: "Fact table for ancillary services."
+    columns:
+      - name: date_key
+        data_type: integer
+      - name: property_key
+        data_type: string
+      - name: guest_key
+        data_type: string
+      - name: venue_key
+        data_type: string
+      - name: event_type_key
+        data_type: string
+      - name: spa_revenue
+        data_type: float
+      - name: event_revenue
+        data_type: float
+      - name: attendees_count
+        data_type: integer
+
+  - name: fact_daily_occupancy
+    description: "Fact table for daily occupancy."
+    columns:
+      - name: date_key
+        data_type: integer
+      - name: property_key
+        data_type: string
+      - name: room_type
+        data_type: string
+      - name: rooms_sold
+        data_type: integer
+      - name: total_rooms_available
+        data_type: integer
+      - name: occupancy_rate
+        data_type: float
+      - name: adr
+        data_type: float
+      - name: revpar
+        data_type: float
+      - name: ingestion_timestamp
+        data_type: timestamp
