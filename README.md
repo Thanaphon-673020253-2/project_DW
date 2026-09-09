@@ -17,18 +17,87 @@
 ## 🏨 ข้อมูลจำเพาะของโครงงาน (Domain & Architecture)
 * **Domain:** ธุรกิจโรงแรมและรีสอร์ท (ครอบคลุมการจองห้องพัก, อาหารและเครื่องดื่ม F&B, สปา, การจัดงาน/Venue และทรัพยากรบุคคล HR)
 * **Operational Database (ER Diagram):** ออกแบบระบบ OLTP แบบ Normalized (3NF) ครบถ้วน 23 ตาราง รองรับการทำงานประจำวัน
+
+![Operational Database ER Diagram](./Figure/ER_DW.png)
+
 * **Data Warehouse (Star Schema):** ออกแบบระบบ OLAP สำหรับวิเคราะห์ข้อมูล ประกอบด้วย:
   * **Fact Tables (5 ตาราง):** เช่น `fact_hotel_bookings`, `fact_fnb_operations`, `fact_hotel_operations_hr`, `fact_ancillary_services`, และ `fact_daily_occupancy`
   * **Dimension Tables (8 ตาราง):** เช่น `dim_date`, `dim_property`, `dim_guest`, `dim_room`, `dim_employee`, `dim_fnb_outlet`, `dim_venue`, และ `dim_event_type`
 
+![Star Schema Data Model Diagram](./Figure/Star-Schema_DW.png)
+
 ---
 
 ## 📊 คำถามทางธุรกิจ (Business Questions $\ge$ 15 ข้อ)
-โปรเจกต์นี้ตอบคำถามเชิงวิเคราะห์และสนับสนุนการตัดสินใจทางธุรกิจรวม 15 ข้อ ครอบคลุม 4 มิติหลัก:
-1. **รายได้และผลประกอบการ (Revenue & Performance):** วิเคราะห์ภาพรวมรายได้, แนวโน้มตามฤดูกาล (Seasonality), และอัตราการเข้าพัก (Occupancy Rate)
-2. **ลูกค้าและพฤติกรรม (Customer Analysis):** วิเคราะห์พฤติกรรมตามระดับสมาชิก (Loyalty Tier), สัญชาติหลัก (Top Nationalities), และระยะเวลาเข้าพัก (ALOS)
-3. **ห้องพักและการจอง (Room & Booking Patterns):** วิเคราะห์ Lead Time, โครงสร้างประเภทห้องพัก, และอัตราการยกเลิกการจอง (Cancellation Rate)
-4. **ปฏิบัติการและสถานที่ (Operations & Venue):** วิเคราะห์การใช้ประโยชน์จากพื้นที่จัดงาน (Venue Utilization) และประเภทอีเวนต์ที่สร้างรายได้สูงสุด
+โปรเจกต์นี้ออกแบบโครงสร้าง Data Warehouse เพื่อรองรับการวิเคราะห์และตอบคำถามเชิงกลยุทธ์ทางธุรกิจรวม **15 ข้อ** ครอบคลุม 4 มิติหลัก ดังนี้:
+
+### 📊 1. รายได้และผลประกอบการ (Revenue & Performance)
+* **1. Total Revenue & Nights Sold**
+  * **Question:** ภาพรวมผลประกอบการด้านรายได้รวม (Total Revenue) และจำนวนคืนที่มีการเข้าพักรวม (Total Nights Sold) ของโรงแรมทั้ง 5 สาขา อยู่ที่ระดับใด
+  * **Data Sources:** `fact_hotel_bookings`, `dim_date`, `dim_property`.
+  * **Business Value & Action Plan:** ประเมินขนาดธุรกิจและตั้งเป้าหมาย Sales Target / YoY Growth.
+* **2. Seasonality Trend (Revenue Trend)**
+  * **Question:** รูปแบบความผันผวนของรายได้ตามฤดูกาล (Seasonality Trend) ในรอบปี มีช่วง Peak Season และ Low Season ในเดือนใดบ้าง
+  * **Data Sources:** `fact_hotel_bookings`, `dim_date`, `dim_property`.
+  * **Business Value & Action Plan:** บริหารกำลังคน ปิดปรับปรุงช่วง Low Season และทำโปรโมชันพยุงรายได้.
+* **3. Weekday vs. Weekend Distribution**
+  * **Question:** สัดส่วนรายได้ระหว่างวันธรรมดา (Weekday) และวันหยุดสุดสัปดาห์ (Weekend) มีการกระจายตัวอย่างไร
+  * **Data Sources:** `fact_hotel_bookings`, `dim_date`, `dim_property`.
+  * **Business Value & Action Plan:** รักษาฐานกลุ่ม Corporate วันธรรมดา และออกแพ็กเกจ Staycation ดันสัดส่วนวันหยุด.
+* **4. Ancillary Services Growth Structure**
+  * **Question:** โครงสร้างรายได้และปริมาณผู้เข้าใช้บริการเสริม (Event & Venue, F&B, Spa & Wellness) มีสัดส่วนการเติบโตเป็นอย่างไร
+  * **Data Sources:** `fact_fnb_operations`, `fact_ancillary_services`, `dim_date`, `dim_property`.
+  * **Business Value & Action Plan:** ค้นหา Cash Cow และทำ Cross-selling Package เพิ่มรายได้ต่อหัว (RevPAS/RevPOR).
+* **5. Occupancy Rate Efficiency**
+  * **Question:** ประสิทธิภาพในการดำเนินงานด้านอัตราการเข้าพักเฉลี่ย (Occupancy Rate) ของแต่ละสาขามีความแตกต่างกันอย่างไร
+  * **Data Sources:** `fact_daily_occupancy`, `dim_property`.
+  * **Business Value & Action Plan:** ใช้ Dynamic Pricing กับสาขา Occupancy สูง และทำโปรโมชันกระตุ้นสาขาต่ำ.
+
+### **👥 2. ลูกค้าและพฤติกรรม (Customer Analysis)**
+* **6. Loyalty Program Repeat Stay Trends**
+  * **Question:** อัตราการเข้าพักซ้ำมีแนวโน้มการเติบโตอย่างไรเมื่อจำแนกตามระดับสมาชิก (Loyalty Tier)
+  * **Data Sources:** `fact_hotel_bookings`, `dim_guest`, `dim_property`, `dim_date`.
+  * **Business Value & Action Plan:** ให้สิทธิประโยชน์เฉพาะกลุ่ม Gold/Platinum และกระตุ้นกลุ่ม None/Silver.
+* **7. Top 5 Geographic Nationalities**
+  * **Question:** โครงสร้างกลุ่มสัญชาตินักท่องเที่ยวหลัก (Top 5 Geographics) ที่สร้างยอดจองสูงสุดมีสัดส่วนเป็นอย่างไร
+  * **Data Sources:** `fact_hotel_bookings`, `dim_guest`, `dim_property`, `dim_date`.
+  * **Business Value & Action Plan:** เจาะกลุ่มประเทศหลักอย่าง Indonesia และตลาดยุโรป/ออสเตรเลียด้วย Performance Marketing.
+* **8. F&B vs. Spa Behavioral Differences**
+  * **Question:** พฤติกรรมการใช้บริการด้านอาหาร (Food) และสปา (Spa) มีความแตกต่างกันอย่างไรระหว่างกลุ่มลูกค้านักท่องเที่ยวในประเทศและต่างชาติ
+  * **Data Sources:** `fact_fnb_operations`, `fact_ancillary_services`, `dim_guest`, `dim_date`, `dim_property`.
+  * **Business Value & Action Plan:** ออกแพ็กเกจสปาสำหรับต่างชาติ และเมนูอาหารตอบโจทย์ลูกค้าในประเทศ.
+* **9. Average Length of Stay (ALOS)**
+  * **Question:** ระยะเวลาในการเข้าพักเฉลี่ยต่อครั้ง (Average Length of Stay) ของลูกค้าในแต่ละสาขามีสัดส่วนกี่คืน
+  * **Data Sources:** `fact_hotel_bookings`, `dim_guest`, `dim_property`, `dim_date`.
+  * **Business Value & Action Plan:** ทำโปรโมชัน "Long-stay Discount" ดันยอดคืนพักในสาขาที่มีค่าเฉลี่ยต่ำ.
+
+### **🛏️ 3. ห้องพักและการจอง (Room & Booking Patterns)**
+* **10. Booking Lead Time Patterns**
+  * **Question:** พฤติกรรมการวางแผนเดินทางของลูกค้าผ่านระยะเวลาการจองล่วงหน้าเฉลี่ย (Lead Time) มีระยะเวลากี่วัน
+  * **Data Sources:** `fact_hotel_bookings`, `dim_property`, `dim_date`.
+  * **Business Value & Action Plan:** กำหนดช่วงปล่อยโปรโมชัน "Early Bird" และ Last-minute pricing ใกล้วันเข้าพัก.
+* **11. Room Type Revenue & Booking Structure**
+  * **Question:** โครงสร้างรายได้และปริมาณยอดจองเมื่อจำแนกตามประเภทห้องพัก (Suite, Deluxe, Villa, Standard) มีลักษณะอย่างไร
+  * **Data Sources:** `fact_hotel_bookings`, `dim_room`, `dim_property`, `dim_date`.
+  * **Business Value & Action Plan:** ปรับ Room Mix และทำ Up-selling จาก Standard ไป Deluxe/Suite.
+* **12. Room Cancellation Risk Analysis**
+  * **Question:** สัดส่วนอัตราการยกเลิกการจอง (Cancellation Rate) ในแต่ละประเภทห้องพักมีระดับความเสี่ยงอย่างไร
+  * **Data Sources:** `fact_hotel_bookings`, `dim_room`, `dim_property`, `dim_date`.
+  * **Business Value & Action Plan:** กำหนดนโยบาย Non-refundable rate สำหรับห้องที่มีอัตราการยกเลิกสูง.
+
+### **📅 4. ปฏิบัติการและสถานที่ (Operations & Venue)**
+* **13. Venue Utilization Volume**
+  * **Question:** พื้นที่จัดงานประเภทใด (Ballroom, Meeting Room, Outdoor) ที่ได้รับการจองใช้บริการสูงสุด
+  * **Data Sources:** `fact_ancillary_services`, `dim_venue`, `dim_property`, `dim_date`.
+  * **Business Value & Action Plan:** วางแผนปรับปรุง Ballroom ยอดจองสูงสุด และเพิ่มแพ็กเกจ Meeting Room/Outdoor.
+* **14. Event Type Frequency (High Volume)**
+  * **Question:** ประเภทของงานจัดเลี้ยง/ประชุม (Event Category) ใดที่มีความถี่ในการจัดงานสูงสุด
+  * **Data Sources:** `fact_ancillary_services`, `dim_event_type`, `dim_date`, `dim_property`.
+  * **Business Value & Action Plan:** มุ่งเน้น B2B Marketing เจาะกลุ่มลูกค้าองค์กรเพื่อสร้างยอดจองประชุมสม่ำเสมอ.
+* **15. Event Revenue Drivers (High Value)**
+  * **Question:** งานจัดเลี้ยงประเภทใดที่สร้างมูลค่ารายได้รวมสูงสุด (Revenue Drivers) ให้แก่โรงแรม
+  * **Data Sources:** `fact_ancillary_services`, `dim_event_type`, `dim_date`, `dim_property`.
+  * **Business Value & Action Plan:** ผลักดันงาน Wedding แพ็กเกจใหญ่ราคาสูงคู่กับงาน Corporate เพื่อสร้างกระแสเงินสด.
 
 ---
 
@@ -68,11 +137,23 @@
 * **Data Quality Control:** ทำการทดสอบคุณภาพข้อมูลอัตโนมัติด้วยคำสั่ง `dbt test` ครอบคลุม 24 Data Tests ผ่านไฟล์ `schema.yml`:
   * **`unique` Test:** ตรวจสอบความซ้ำซ้อนของ Surrogate Primary Keys ในทุก Dimension Tables
   * **`not_null` Test:** ตรวจสอบว่าไม่มีค่า Null ในคอลัมน์ Primary Keys และ Business Keys สำคัญ
-* **ผลการทดสอบ:** ผ่านการทดสอบคุณภาพข้อมูลสำเร็จ 100% 
+* **ผลการทดสอบ:** ผ่านการทดสอบคุณภาพข้อมูลสำเร็จ 100% (**PASS=24, ERROR=0**)
 
-## 📈 Interactive Dashboard
-* เชื่อมต่อข้อมูลจริงจาก Data Warehouse สู่เครื่องมือ Visualization สำหรับแสดงผลตัวชี้วัดสำคัญ (KPIs) เช่น RevPAR, ADR, Occupancy Rate และสัดส่วนรายได้แยกตามสาขา
-* **[คลิกที่นี่เพื่อเข้าชม Dashboard (ใส่ลิงก์ของคุณที่นี่)]**
+---
+
+## 📈 Interactive Dashboard (Streamlit)
+แพลตฟอร์มการแสดงผลข้อมูลเชิงโต้ตอบ (Interactive Dashboard) พัฒนาขึ้นด้วย **Streamlit** เชื่อมต่อโดยตรงกับ DuckDB Data Warehouse เพื่อแสดงผลตัวชี้วัดสำคัญทางธุรกิจ (KPIs) เช่น RevPAR, ADR, Occupancy Rate และแนวโน้มรายได้แยกตามสาขา
+
+* **วิธีรัน Dashboard ในเครื่อง:**
+  1. ติดตั้งไลบรารี Streamlit และ DuckDB:
+     ```bash
+     pip install streamlit duckdb
+     ```
+  2. รันแอปพลิเคชันผ่านคอมมานด์ไลน์:
+     ```bash
+     streamlit run app.py
+     ```
+* **[คลิกที่นี่เพื่อเข้าชมระบบ Streamlit Dashboard (ลิงก์เว็บแอปพลิเคชัน)]**
 
 ---
 
