@@ -79,7 +79,7 @@
   * **Data Sources:** `fact_hotel_bookings`, `dim_room`, `dim_property`, `dim_date`.
   * **Business Value & Action Plan:** ปรับ Room Mix และทำ Up-selling จาก Standard ไป Deluxe/Suite.
 * **12. Room Cancellation Risk Analysis**
-  * **Question:** สัดส่วนอัตราการยกเลิกการจอง (Cancellation Rate) ในแต่ละประเภทห้องพักมีระดับความเสี่ยงอย่างไร
+  * **Question:** ห้องพักแต่ละประเภทมีอัตราการยกเลิกกี่เปอร์เซ็นต์ และประเภทไหนมีความเสี่ยงที่จะถูกยกเลิกสูงที่สุด
   * **Data Sources:** `fact_hotel_bookings`, `dim_room`, `dim_property`, `dim_date`.
   * **Business Value & Action Plan:** กำหนดนโยบาย Non-refundable rate สำหรับห้องที่มีอัตราการยกเลิกสูง.
 
