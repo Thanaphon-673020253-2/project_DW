@@ -153,15 +153,37 @@
      ```bash
      streamlit run app.py
      ```
-* **[คลิกที่นี่เพื่อเข้าชมระบบ Streamlit Dashboard (ลิงก์เว็บแอปพลิเคชัน)]**
+* **[คลิกที่นี่เพื่อเข้าชมระบบ Streamlit Dashboard ([INDOHOTEL](https://projectdatawarehouse-tee-we-lux.streamlit.app/))]**
 
 ---
 
 ## 🚀 วิธีการรันโปรเจกต์ (Quickstart Guide)
 
 ทำตามขั้นตอนด้านล่างเพื่อรันโปรเจกต์ในเครื่องของคุณ:
-
+0. **Set up the environment**
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate\
+   ```
 1. **โคลน Repository และเข้าไปที่โฟลเดอร์โปรเจกต์:**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/Thanaphon-673020253-2/project_DW.git
+   ```
+2. **Install requirement package**
+   ```bash
+   pip install -r requirement.txt
+   ```
+3. **Use duckDB"
+   ```bash
    cd indohotel
+   dbt debug
+   dbt run
+   dbt test
+   cd ..
+   ```
+4. **Use Streamlit for view Dashboard **
+    ```bash
+     streamlit run app.py
+    ```
+
+   
