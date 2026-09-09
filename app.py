@@ -1,4 +1,5 @@
 import os
+import subprocess
 import duckdb
 import pandas as pd
 import plotly.express as px
@@ -95,28 +96,52 @@ def safe_number(value, default=0):
         return default
 
 # =========================================================
-# DATABASE CONNECTION
+# DATABASE AUTO-BUILD & CONNECTION (STREAMLIT CLOUD SUPPORT)
 # =========================================================
 
 @st.cache_resource
 def get_connection():
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    possible_paths = [
-        os.path.join(base_dir, "indohotel", "dev.duckdb"),
-        os.path.join(base_dir, "dev.duckdb")
-    ]
-    db_path = next((path for path in possible_paths if os.path.exists(path)), None)
+    
+    # กำหนดตำแหน่ง path ที่เป็นไปได้ทั้งหมด
+    path_in_sub = os.path.join(base_dir, "indohotel", "dev.duckdb")
+    path_in_root = os.path.join(base_dir, "dev.duckdb")
+    
+    db_path = None
+    if os.path.exists(path_in_sub):
+        db_path = path_in_sub
+    elif os.path.exists(path_in_root):
+        db_path = path_in_root
 
+    # หากยังไม่พบไฟล์ฐานข้อมูล ให้สั่งรัน dbt run อัตโนมัติ
     if db_path is None:
-        st.error("❌ ไม่พบไฟล์ฐานข้อมูล dev.duckdb\n\nกรุณาตรวจสอบว่าไฟล์อยู่ที่: `indohotel/dev.duckdb`")
-        st.stop()
+        with st.spinner("⏳ กำลังเตรียมฐานข้อมูลคลังข้อมูล (รัน dbt pipeline ครั้งแรก)..."):
+            try:
+                dbt_cwd = os.path.join(base_dir, "indohotel") if os.path.exists(os.path.join(base_dir, "indohotel", "dbt_project.yml")) else base_dir
+                
+                result = subprocess.run(["dbt", "run"], capture_output=True, text=True, cwd=dbt_cwd)
+                if result.returncode != 0:
+                    st.error(f"❌ เกิดข้อผิดพลาดในการรัน dbt:\n\n{result.stderr}")
+                    st.stop()
+            except Exception as e:
+                st.error(f"❌ ไม่สามารถรันคำสั่ง dbt ได้:\n\n{e}")
+                st.stop()
+            
+            # ค้นหาไฟล์อีกครั้งหลังรันเสร็จ
+            if os.path.exists(path_in_sub):
+                db_path = path_in_sub
+            elif os.path.exists(path_in_root):
+                db_path = path_in_root
+            else:
+                os.makedirs(os.path.join(base_dir, "indohotel"), exist_ok=True)
+                db_path = path_in_sub
 
     try:
         conn = duckdb.connect(db_path, read_only=True)
         conn.execute("SET search_path = 'main';")
         return conn
     except Exception as e:
-        st.error(f"❌ ไม่สามารถเชื่อมต่อ DuckDB ได้\n\n{e}")
+        st.error(f"❌ ไม่สามารถเชื่อมต่อ DuckDB ได้ที่ path: {db_path}\n\n{e}")
         st.stop()
 
 
