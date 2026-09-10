@@ -215,7 +215,7 @@ source .venv/bin/activate
 ```
 
 > สำหรับ Windows สามารถใช้:
->
+
 > ```powershell
 > .venv\Scripts\activate
 > ```
