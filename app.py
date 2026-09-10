@@ -401,20 +401,29 @@ with tab2:
         st.markdown("**🥗 เปรียบเทียบการใช้บริการ Food และ Spa (ในประเทศ vs ต่างชาติ)**")
         q8_df = conn.execute(
             f"""
-            SELECT 'Food' AS service_type, CASE WHEN g.is_domestic = TRUE THEN 'ในประเทศ (Domestic)' ELSE 'ต่างชาติ (International)' END AS guest_type, COUNT(*) AS service_count
-            FROM main.fact_fnb_operations f JOIN main.dim_guest g ON f.guest_key = g.guest_key JOIN main.dim_date d ON f.date_key = d.date_key JOIN main.dim_property p ON f.property_key = p.property_key {where_stmt} AND f.sales_amount > 0 GROUP BY 1, 2
-            UNION ALL
-            SELECT 'Spa' AS service_type, CASE WHEN g.is_domestic = TRUE THEN 'ในประเทศ (Domestic)' ELSE 'ต่างชาติ (International)' END AS guest_type, COUNT(*) AS service_count
-            FROM main.fact_ancillary_services a JOIN main.dim_guest g ON a.guest_key = g.guest_key JOIN main.dim_date d ON a.date_key = d.date_key JOIN main.dim_property p ON a.property_key = p.property_key {where_stmt} AND a.spa_revenue > 0 GROUP BY 1, 2
+            WITH raw_data AS (
+                SELECT 'Food' AS service_type, CASE WHEN g.is_domestic = TRUE THEN 'ในประเทศ (Domestic)' ELSE 'ต่างชาติ (International)' END AS guest_type, COUNT(*) AS service_count
+                FROM main.fact_fnb_operations f JOIN main.dim_guest g ON f.guest_key = g.guest_key JOIN main.dim_date d ON f.date_key = d.date_key JOIN main.dim_property p ON f.property_key = p.property_key {where_stmt} AND f.sales_amount > 0 GROUP BY 1, 2
+                UNION ALL
+                SELECT 'Spa' AS service_type, CASE WHEN g.is_domestic = TRUE THEN 'ในประเทศ (Domestic)' ELSE 'ต่างชาติ (International)' END AS guest_type, COUNT(*) AS service_count
+                FROM main.fact_ancillary_services a JOIN main.dim_guest g ON a.guest_key = g.guest_key JOIN main.dim_date d ON a.date_key = d.date_key JOIN main.dim_property p ON a.property_key = p.property_key {where_stmt} AND a.spa_revenue > 0 GROUP BY 1, 2
+            )
+            SELECT service_type, guest_type, service_count,
+                   (service_count * 100.0 / SUM(service_count) OVER (PARTITION BY service_type)) AS percentage
+            FROM raw_data
             """
         ).df()
 
         if not q8_df.empty:
-            fig_q8 = px.bar(q8_df, x="service_type", y="service_count", color="guest_type", barmode="group", text="service_count", color_discrete_sequence=["#38bdf8", "#fb7185"])
-            fig_q8.update_traces(texttemplate="%{text:,.0f}", textposition="outside")
+            fig_q8 = px.bar(
+                q8_df, x="service_type", y="service_count", color="guest_type", 
+                barmode="group", text="service_count", color_discrete_sequence=["#38bdf8", "#fb7185"],
+                custom_data=["percentage"]
+            )
+            fig_q8.update_traces(texttemplate="%{text:,.0f} (%{customdata[0]:.1f}%)", textposition="outside")
             st.plotly_chart(clean_chart(fig_q8), use_container_width=True)
         else:
-            st.info("ไม่พบข้อมูลการใช้บริการ Spa และ Food")
+            st.info("ไม่พบข้อมูลการใช้บริการ Spa และFood")
 
     with col_f:
         st.markdown("**🛌 ระยะเวลาเข้าพักเฉลี่ย (Nights Stayed) ตามสาขาโรงแรม**")
