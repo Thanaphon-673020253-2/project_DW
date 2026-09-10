@@ -1,8 +1,5 @@
-# IndoHotel Data Warehouse & Analytics Platform
+# IndoHotel Data Warehouse
 
-แพลตฟอร์มคลังข้อมูล (Data Warehouse) และระบบวิเคราะห์ข้อมูลอัจฉริยะสำหรับธุรกิจโรงแรมและรีสอร์ท (Hospitality & Tourism Industry) โดยใช้สถาปัตยกรรมแบบ Star Schema ร่วมกับเครื่องมือ Modern Data Stack (dbt และ DuckDB)
-
----
 
 ## 👥 สมาชิกในกลุ่ม (Team Members)
 * **673020253-2 ธนพล ท้าวนอ**
@@ -15,7 +12,8 @@
 ---
 
 ## 🏨 ข้อมูลจำเพาะของโครงงาน (Domain & Architecture)
-* **Domain:** ธุรกิจโรงแรมและรีสอร์ท (ครอบคลุมการจองห้องพัก, อาหารและเครื่องดื่ม F&B, สปา, การจัดงาน/Venue และทรัพยากรบุคคล HR)
+* **Domain:** ธุรกิจโรงแรมและรีสอร์ท (ครอบคลุมการจองห้องพัก, อาหารและเครื่องดื่ม F&B, สปา, การจัดงาน/Venue และทรัพยากรบุคคล HR) 
+  * **Dataset Source:** อ้างอิงชุดข้อมูลจำลองการดำเนินงานกลุ่มโรงแรมจาก [Kaggle: Indonesian Hotel Group Operations Data](https://www.kaggle.com/datasets/ardiyanto24/indonesian-hotel-group-operations-data?select=corporate_master)
 * **Operational Database (ER Diagram):** ออกแบบระบบ OLTP แบบ Normalized (3NF) ครบถ้วน 23 ตาราง รองรับการทำงานประจำวัน
 
 ![Operational Database ER Diagram](./Figure/ER_DW.png)
@@ -28,7 +26,7 @@
 
 ---
 
-## 📊 คำถามทางธุรกิจ (Business Questions $\ge$ 15 ข้อ)
+## 📊 คำถามทางธุรกิจ (Business Questions 15 ข้อ)
 โปรเจกต์นี้ออกแบบโครงสร้าง Data Warehouse เพื่อรองรับการวิเคราะห์และตอบคำถามเชิงกลยุทธ์ทางธุรกิจรวม **15 ข้อ** ครอบคลุม 4 มิติหลัก ดังนี้:
 
 ### 📊 1. รายได้และผลประกอบการ (Revenue & Performance)
@@ -81,7 +79,7 @@
   * **Data Sources:** `fact_hotel_bookings`, `dim_room`, `dim_property`, `dim_date`.
   * **Business Value & Action Plan:** ปรับ Room Mix และทำ Up-selling จาก Standard ไป Deluxe/Suite.
 * **12. Room Cancellation Risk Analysis**
-  * **Question:** สัดส่วนอัตราการยกเลิกการจอง (Cancellation Rate) ในแต่ละประเภทห้องพักมีระดับความเสี่ยงอย่างไร
+  * **Question:** ห้องพักแต่ละประเภทมีอัตราการยกเลิกกี่เปอร์เซ็นต์ และประเภทไหนมีความเสี่ยงที่จะถูกยกเลิกสูงที่สุด
   * **Data Sources:** `fact_hotel_bookings`, `dim_room`, `dim_property`, `dim_date`.
   * **Business Value & Action Plan:** กำหนดนโยบาย Non-refundable rate สำหรับห้องที่มีอัตราการยกเลิกสูง.
 
@@ -137,43 +135,43 @@
 * **Data Quality Control:** ทำการทดสอบคุณภาพข้อมูลอัตโนมัติด้วยคำสั่ง `dbt test` ครอบคลุม 24 Data Tests ผ่านไฟล์ `schema.yml`:
   * **`unique` Test:** ตรวจสอบความซ้ำซ้อนของ Surrogate Primary Keys ในทุก Dimension Tables
   * **`not_null` Test:** ตรวจสอบว่าไม่มีค่า Null ในคอลัมน์ Primary Keys และ Business Keys สำคัญ
-* **ผลการทดสอบ:** ผ่านการทดสอบคุณภาพข้อมูลสำเร็จ 100% (**PASS=24, ERROR=0**)
+* **ผลการทดสอบ:** ผ่านการทดสอบคุณภาพข้อมูลสำเร็จ 100%
 
 ---
 
 ## 📈 Interactive Dashboard (Streamlit)
-แพลตฟอร์มการแสดงผลข้อมูลเชิงโต้ตอบ (Interactive Dashboard) พัฒนาขึ้นด้วย **Streamlit** เชื่อมต่อโดยตรงกับ DuckDB Data Warehouse เพื่อแสดงผลตัวชี้วัดสำคัญทางธุรกิจ (KPIs) เช่น RevPAR, ADR, Occupancy Rate และแนวโน้มรายได้แยกตามสาขา
 
-* **วิธีรัน Dashboard ในเครื่อง:**
-  1. ติดตั้งไลบรารี Streamlit และ DuckDB:
-     ```bash
-     pip install streamlit duckdb
-     ```
-  2. รันแอปพลิเคชันผ่านคอมมานด์ไลน์:
-     ```bash
-     streamlit run app.py
-     ```
-* **[คลิกที่นี่เพื่อเข้าชมระบบ Streamlit Dashboard ([INDOHOTEL](https://projectdatawarehouse-tee-we-lux.streamlit.app/))]**
+แพลตฟอร์มการแสดงผลข้อมูลเชิงโต้ตอบ (Interactive Dashboard) พัฒนาขึ้นด้วย **Streamlit** เชื่อมต่อโดยตรงกับ DuckDB Data Warehouse เพื่อตอบโจทย์คำถามเชิงกลยุทธ์ทั้ง 15 ข้อขององค์กร
 
+* **🔗 ลิงก์เข้าชมระบบ:** [👉 คลิกที่นี่เพื่อใช้งาน Streamlit Dashboard (INDOHOTEL)](https://projectdatawarehouse-tee-we-lux.streamlit.app/)
+
+| แท็บการใช้งาน (Tab) | ตัวชี้วัดสำคัญ (Key Metrics) | กราฟและเครื่องมือวิเคราะห์ (Visualizations) |
+| :--- | :--- | :--- |
+| **1. รายได้และผลประกอบการ** | ยอดขายรวม (Total Revenue), จำนวนคืนที่จอง (Nights) | • กราฟเส้นแนวโน้มรายได้ตามช่วงเดือน/ฤดูกาล<br>• กราฟโดนัทสัดส่วนยอดขายวันธรรมดา vs วันหยุดสุดสัปดาห์<br>• การแสดงผลสัดส่วนรายได้และผู้ใช้บริการเสริม (F&B, Spa, Event)<br>• กราฟอัตราการเข้าพักเฉลี่ย (Occupancy Rate) แยกตามสาขา |
+| **2. ลูกค้าและพฤติกรรม** | ค่าเฉลี่ยการเข้าพักซ้ำตาม Loyalty Tier, สัญชาติลูกค้า Top 5 | • กราฟแท่งแสดงอัตราการเข้าพักซ้ำตามระดับสมาชิก<br>• กราฟแท่งแนวนอนแสดงสัญชาติลูกค้าสูงสุด 5 อันดับแรก<br>• กราฟเปรียบเทียบการใช้บริการ Food และ Spa ระหว่างลูกค้าในประเทศและต่างชาติ<br>• กราฟระยะเวลาเข้าพักเฉลี่ย (Nights Stayed) ตามสาขาโรงแรม |
+| **3. ห้องพักและการจอง** | ระยะเวลาการจองล่วงหน้าเฉลี่ย (Lead Time) | • กราฟแท่งแสดงประเภทห้องพักที่สร้างรายได้หลักสูงสุดพร้อมจำนวนการจอง<br>• กราฟแท่งแสดงอัตราการยกเลิกการจอง (%) แยกตามประเภทห้องพัก |
+| **4. ปฏิบัติการและสถานที่** | จำนวนการจองสถานที่และรายได้จากการจัดงาน | • กราฟแท่งแสดงประเภทสถานที่จัดงาน (Venue Type) ที่มีการจองสูงสุด<br>• กราฟเปรียบเทียบจำนวนครั้งและรายได้รวมแยกตามประเภทกิจกรรมจัดงาน (Event Type Breakdown) |
 ---
 
 ## 🚀 วิธีการรันโปรเจกต์ (Quickstart Guide)
 
 ทำตามขั้นตอนด้านล่างเพื่อรันโปรเจกต์ในเครื่องของคุณ:
+
 0. **Set up the environment**
    ```bash
    python3 -m venv .venv
-   source .venv/bin/activate\
+   source .venv/bin/activate
    ```
 1. **โคลน Repository และเข้าไปที่โฟลเดอร์โปรเจกต์:**
    ```bash
    git clone https://github.com/Thanaphon-673020253-2/project_DW.git
    ```
-2. **Install requirement package**
+2. **Install requirements package**
    ```bash
-   pip install -r requirement.txt
+   pip install --upgrade pip
+   pip install -r requirements.txt
    ```
-3. **Use duckDB"
+3. **Run DBT**
    ```bash
    cd indohotel
    dbt debug
@@ -181,9 +179,9 @@
    dbt test
    cd ..
    ```
-4. **Use Streamlit for view Dashboard **
-    ```bash
-     streamlit run app.py
-    ```
+4. **Run Streamlit for view Dashboard**
+   ```bash
+   streamlit run app.py
+   ```
 
    
