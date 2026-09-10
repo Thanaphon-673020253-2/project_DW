@@ -104,38 +104,38 @@ Data Warehouse ถูกออกแบบเพื่อรองรับ Busi
 
 ### 📊 1. รายได้และผลประกอบการ (Revenue & Performance)
 
-|     # | Business Question                                                           | Main Data                                        | ตอบปัญหาธุรกิจอย่างไร                                                                                                                                                  |
-| ----: | --------------------------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **1** | **Total Revenue & Nights Sold** — รายได้รวมและจำนวนคืนที่เข้าพัก            | `fact_hotel_bookings`                            | ช่วยให้ผู้บริหารเห็นภาพรวม **รายได้และจำนวนคืนที่ขายได้** ของโรงแรม สามารถใช้ติดตามผลประกอบการและเปรียบเทียบ Performance ระหว่างช่วงเวลาและสาขา                        |
-| **2** | **Seasonality Trend** — แนวโน้มรายได้ตามฤดูกาล                              | `fact_hotel_bookings`, `dim_date`                | ช่วยระบุ **ช่วง Peak Season และ Low Season** จากแนวโน้มรายได้ เพื่อใช้วางแผน Promotion, Pricing และการจัดสรรทรัพยากรในแต่ละช่วง                                        |
-| **3** | **Weekday vs. Weekend Distribution** — เปรียบเทียบรายได้วันธรรมดาและวันหยุด | `fact_hotel_bookings`, `dim_date`                | ช่วยให้โรงแรมเข้าใจว่า **รายได้เกิดจาก Weekday หรือ Weekend มากกว่า** และนำไปกำหนดกลยุทธ์ เช่น Corporate Package สำหรับ Weekday หรือ Staycation Package สำหรับ Weekend |
-| **4** | **Ancillary Services Growth Structure** — วิเคราะห์ F&B, Spa และ Event      | `fact_fnb_operations`, `fact_ancillary_services` | ช่วยวิเคราะห์ว่า **บริการเสริมประเภทใดสร้างรายได้และมีปริมาณการใช้บริการสูง** เพื่อค้นหา Revenue Driver และวางแผน Cross-selling                                        |
-| **5** | **Occupancy Rate Efficiency** — เปรียบเทียบ Occupancy ของแต่ละสาขา          | `fact_daily_occupancy`                           | ช่วยเปรียบเทียบ **ประสิทธิภาพการขายห้องพักของแต่ละสาขา** จาก Occupancy Rate, Rooms Sold, ADR และ RevPAR เพื่อใช้วางแผน Pricing และ Promotion                           |
+| # | Business Question | Question | Data Sources | Business Value |
+|---:|---|---|---|---|
+| **1** | **Total Revenue & Nights Sold** | ภาพรวมผลประกอบการด้านรายได้รวม (Total Revenue) และจำนวนคืนที่มีการเข้าพักรวม (Total Nights Sold) ของโรงแรมทั้ง 5 สาขา อยู่ที่ระดับใด | `fact_hotel_bookings`, `dim_date`, `dim_property` | ประเมินขนาดธุรกิจและติดตามผลประกอบการโดยรวม |
+| **2** | **Seasonality Trend (Revenue Trend)** | รูปแบบความผันผวนของรายได้ตามฤดูกาล (Seasonality Trend) ในรอบปี มีช่วง Peak Season และ Low Season ในเดือนใดบ้าง | `fact_hotel_bookings`, `dim_date`, `dim_property` | ช่วยวิเคราะห์แนวโน้มรายได้และระบุช่วง Peak Season และ Low Season |
+| **3** | **Weekday vs. Weekend Distribution** | สัดส่วนรายได้ระหว่างวันธรรมดา (Weekday) และวันหยุดสุดสัปดาห์ (Weekend) มีการกระจายตัวอย่างไร | `fact_hotel_bookings`, `dim_date`, `dim_property` | ช่วยให้เข้าใจรูปแบบรายได้ตามวันและพฤติกรรมการเข้าพักของลูกค้า |
+| **4** | **Ancillary Services Growth Structure** | โครงสร้างรายได้และปริมาณผู้เข้าใช้บริการเสริม (Event & Venue, F&B, Spa & Wellness) มีสัดส่วนการเติบโตเป็นอย่างไร | `fact_fnb_operations`, `fact_ancillary_services`, `dim_date`, `dim_property` | ช่วยระบุบริการเสริมที่เป็นแหล่งรายได้สำคัญของโรงแรม |
+| **5** | **Occupancy Rate Efficiency** | ประสิทธิภาพในการดำเนินงานด้านอัตราการเข้าพักเฉลี่ย (Occupancy Rate) ของแต่ละสาขามีความแตกต่างกันอย่างไร | `fact_daily_occupancy`, `dim_property` | ช่วยเปรียบเทียบประสิทธิภาพการขายห้องพักระหว่างแต่ละสาขา |
 
 ### 👥 2. ลูกค้าและพฤติกรรม (Customer Analysis)
 
-|     # | Business Question                                                             | Main Data                                                     | ตอบปัญหาธุรกิจอย่างไร                                                                                                                              |
-| ----: | ----------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **6** | **Loyalty Program Repeat Stay Trends** — วิเคราะห์พฤติกรรมตาม Loyalty Tier    | `fact_hotel_bookings`, `dim_guest`                            | ช่วยวิเคราะห์พฤติกรรมการจองและการเข้าพักของลูกค้าแต่ละ **Loyalty Tier** เพื่อประเมิน Engagement และวางแผนสิทธิประโยชน์สำหรับลูกค้าแต่ละกลุ่ม       |
-| **7** | **Top 5 Geographic Nationalities** — วิเคราะห์สัญชาติที่สร้างยอดจองสูงสุด     | `fact_hotel_bookings`, `dim_guest`                            | ช่วยระบุ **ตลาดลูกค้าหลักตาม Nationality** และดูว่าสัญชาติใดสร้างจำนวน Booking หรือ Revenue สูง เพื่อใช้กำหนด Target Market และ Marketing Campaign |
-| **8** | **F&B vs. Spa Behavioral Differences** — เปรียบเทียบพฤติกรรม Domestic/Foreign | `fact_fnb_operations`, `fact_ancillary_services`, `dim_guest` | ช่วยเปรียบเทียบการใช้บริการ **F&B และ Spa ระหว่าง Domestic กับ Foreign Guests** เพื่อออกแบบ Service Package และ Promotion ให้เหมาะกับแต่ละกลุ่ม    |
-| **9** | **Average Length of Stay (ALOS)** — วิเคราะห์จำนวนคืนเฉลี่ยต่อ Booking        | `fact_hotel_bookings`                                         | ช่วยให้ทราบว่าแขกแต่ละกลุ่มหรือแต่ละสาขามี **ระยะเวลาเข้าพักเฉลี่ยกี่คืน** เพื่อนำไปวางแผน Long-stay Promotion และเพิ่มจำนวน Nights Sold           |
+| # | Business Question | Question | Data Sources | Business Value |
+|---:|---|---|---|---|
+| **6** | **Loyalty Program Repeat Stay Trends** | อัตราการเข้าพักซ้ำมีแนวโน้มการเติบโตอย่างไรเมื่อจำแนกตามระดับสมาชิก (Loyalty Tier) | `fact_hotel_bookings`, `dim_guest`, `dim_property`, `dim_date` | ช่วยวิเคราะห์ความสัมพันธ์ระหว่าง Loyalty Tier และพฤติกรรมการกลับมาเข้าพัก |
+| **7** | **Top 5 Geographic Nationalities** | โครงสร้างกลุ่มสัญชาตินักท่องเที่ยวหลัก (Top 5 Geographics) ที่สร้างยอดจองสูงสุดมีสัดส่วนเป็นอย่างไร | `fact_hotel_bookings`, `dim_guest`, `dim_property`, `dim_date` | ช่วยระบุตลาดลูกค้าหลักตาม Nationality และตลาดที่สร้างยอดจองสูง |
+| **8** | **F&B vs. Spa Behavioral Differences** | พฤติกรรมการใช้บริการด้านอาหาร (Food) และสปา (Spa) มีความแตกต่างกันอย่างไรระหว่างกลุ่มลูกค้านักท่องเที่ยวในประเทศและต่างชาติ | `fact_fnb_operations`, `fact_ancillary_services`, `dim_guest`, `dim_date`, `dim_property` | ช่วยเปรียบเทียบพฤติกรรมการใช้บริการของ Domestic และ Foreign Guests |
+| **9** | **Average Length of Stay (ALOS)** | ระยะเวลาในการเข้าพักเฉลี่ยต่อครั้ง (Average Length of Stay) ของลูกค้าในแต่ละสาขามีสัดส่วนกี่คืน | `fact_hotel_bookings`, `dim_guest`, `dim_property`, `dim_date` | ช่วยวิเคราะห์ระยะเวลาเข้าพักเฉลี่ยและพฤติกรรมการเข้าพักของลูกค้า |
 
 ### 🛏️ 3. ห้องพักและการจอง (Room & Booking Patterns)
 
-|      # | Business Question                                                                 | Main Data                         | ตอบปัญหาธุรกิจอย่างไร                                                                                                                         |
-| -----: | --------------------------------------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| **10** | **Booking Lead Time Patterns** — วิเคราะห์จำนวนวันจองล่วงหน้า                     | `fact_hotel_bookings`             | ช่วยให้โรงแรมเข้าใจว่าแขก **จองห้องล่วงหน้ากี่วัน** เพื่อกำหนดช่วงเวลาสำหรับ Early Bird Promotion และ Last-minute Pricing                     |
-| **11** | **Room Type Revenue & Booking Structure** — วิเคราะห์รายได้และยอดจองตามประเภทห้อง | `fact_hotel_bookings`, `dim_room` | ช่วยระบุว่า **Room Type ใดมียอดจองและรายได้สูง** เพื่อใช้ปรับ Room Mix, ราคา และกลยุทธ์ Up-selling                                            |
-| **12** | **Room Cancellation Risk Analysis** — วิเคราะห์อัตราการยกเลิกตามประเภทห้อง        | `fact_hotel_bookings`, `dim_room` | ช่วยระบุ **Room Type ที่มี Cancellation Rate สูง** เพื่อประเมินความเสี่ยงและกำหนดนโยบาย เช่น Non-refundable Rate หรือเงื่อนไขการจองที่เหมาะสม |
+| # | Business Question | Question | Data Sources | Business Value |
+|---:|---|---|---|---|
+| **10** | **Booking Lead Time Patterns** | พฤติกรรมการวางแผนเดินทางของลูกค้าผ่านระยะเวลาการจองล่วงหน้าเฉลี่ย (Lead Time) มีระยะเวลากี่วัน | `fact_hotel_bookings`, `dim_property`, `dim_date` | ช่วยวิเคราะห์พฤติกรรมการจองล่วงหน้าและรูปแบบการวางแผนเดินทางของลูกค้า |
+| **11** | **Room Type Revenue & Booking Structure** | โครงสร้างรายได้และปริมาณยอดจองเมื่อจำแนกตามประเภทห้องพัก (Suite, Deluxe, Villa, Standard) มีลักษณะอย่างไร | `fact_hotel_bookings`, `dim_room`, `dim_property`, `dim_date` | ช่วยระบุ Room Type ที่ได้รับความนิยมและสร้างรายได้สูง |
+| **12** | **Room Cancellation Risk Analysis** | ห้องพักแต่ละประเภทมีอัตราการยกเลิกกี่เปอร์เซ็นต์ และประเภทไหนมีความเสี่ยงที่จะถูกยกเลิกสูงที่สุด | `fact_hotel_bookings`, `dim_room`, `dim_property`, `dim_date` | ช่วยวิเคราะห์ความเสี่ยงด้านการยกเลิกของแต่ละ Room Type |
 
 ### 📅 4. ปฏิบัติการและสถานที่ (Operations & Venue)
 
-|      # | Business Question                                                  | Main Data                                   | ตอบปัญหาธุรกิจอย่างไร                                                                                                                                |
-| -----: | ------------------------------------------------------------------ | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **13** | **Venue Utilization Volume** — วิเคราะห์ปริมาณการใช้ Venue         | `fact_ancillary_services`, `dim_venue`      | ช่วยระบุว่า **Venue ประเภทใดถูกใช้งานมากที่สุด** เพื่อใช้วางแผน Capacity, การปรับปรุงพื้นที่ และการจัดสรรทรัพยากร                                    |
-| **14** | **Event Type Frequency** — วิเคราะห์ประเภท Event ที่เกิดขึ้นบ่อย   | `fact_ancillary_services`, `dim_event_type` | ช่วยระบุว่า **Event Type ใดมีความถี่ในการจัดงานสูง** เพื่อใช้กำหนดกลุ่มลูกค้าเป้าหมายและวางแผนการตลาดสำหรับ Event ที่มี Demand สูง                   |
-| **15** | **Event Revenue Drivers** — วิเคราะห์ Event Type ที่สร้างรายได้สูง | `fact_ancillary_services`, `dim_event_type` | ช่วยระบุว่า **Event Type ใดสร้างรายได้สูงสุด** เพื่อให้โรงแรมสามารถมุ่งเน้นการขาย Event ที่มี Revenue Potential สูง และพัฒนา Package ให้เหมาะกับตลาด |
+| # | Business Question | Question | Data Sources | Business Value |
+|---:|---|---|---|---|
+| **13** | **Venue Utilization Volume** | พื้นที่จัดงานประเภทใด (Ballroom, Meeting Room, Outdoor) ที่ได้รับการจองใช้บริการสูงสุด | `fact_ancillary_services`, `dim_venue`, `dim_property`, `dim_date` | ช่วยวิเคราะห์ปริมาณการใช้ Venue แต่ละประเภทและประสิทธิภาพการใช้พื้นที่ |
+| **14** | **Event Type Frequency (High Volume)** | ประเภทของงานจัดเลี้ยง/ประชุม (Event Category) ใดที่มีความถี่ในการจัดงานสูงสุด | `fact_ancillary_services`, `dim_event_type`, `dim_date`, `dim_property` | ช่วยระบุ Event Type ที่มี Demand สูงและเกิดขึ้นบ่อย |
+| **15** | **Event Revenue Drivers (High Value)** | งานจัดเลี้ยงประเภทใดที่สร้างมูลค่ารายได้รวมสูงสุด (Revenue Drivers) ให้แก่โรงแรม | `fact_ancillary_services`, `dim_event_type`, `dim_date`, `dim_property` | ช่วยระบุ Event Type ที่เป็นแหล่งรายได้สำคัญของโรงแรม |
 
 ---
 
