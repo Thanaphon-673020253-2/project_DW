@@ -90,7 +90,7 @@ Data Warehouse ใช้แนวคิด **Dimensional Modeling / Galaxy Schem
 | `dim_venue`      | ข้อมูลสถานที่จัดงาน                     |
 | `dim_event_type` | ข้อมูลประเภท Event                      |
 
-![Galaxy Schema Data Model Diagram](./Figure/Galaxy-Schema.png)
+![Galaxy Schema Data Model Diagram](./Figure/Galaxy_Schema.png)
 
 รายละเอียดการออกแบบจาก Business Questions สามารถดูได้ที่:
 
