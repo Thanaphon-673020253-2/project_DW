@@ -188,7 +188,7 @@ with st.sidebar:
         help="ถ้าเปิด: ตัวเลขรายได้และจำนวนคืนจะไม่รวมการจองที่ is_canceled = true "
              "(Q12 อัตราการยกเลิกจะนับทุกการจองเสมอ)"
     )
-    st.caption("💱 สกุลเงินในข้อมูลเป็นรูเปียห์ (Rp) — ไม่ได้แปลงเป็นบาท")
+    st.caption("💱 สกุลเงินในข้อมูลเป็นรูเปียห์ (Rp)")
 
 # =========================================================
 # GLOBAL SQL FILTER
@@ -326,50 +326,76 @@ with tab1:
     st.markdown("---")
 
     # ---------------- Q3 ----------------
-    question_header(3, "รายได้จากวันธรรมดาเทียบกับวันหยุดสุดสัปดาห์")
+    question_header(3, "รายได้เฉลี่ยต่อวัน วันธรรมดา (Weekday) เทียบกับวันหยุดสุดสัปดาห์ (Weekend) ในแต่ละปี → เดือน")
 
     q3_df = q(
         f"""
         SELECT CASE WHEN d.is_weekend THEN 'Weekend' ELSE 'Weekday' END AS day_type,
-               CAST(d.year AS VARCHAR) AS year,
+               d.year AS year,
+               d.month_name AS month_name,
                COALESCE(SUM(b.total_revenue), 0) AS revenue,
                COUNT(DISTINCT d.date_key) AS days
         FROM main.fact_hotel_bookings b
         JOIN main.dim_date d ON b.date_key = d.date_key
         JOIN main.dim_property p ON b.property_key = p.property_key
         {where_book}
-        GROUP BY 1, 2
+        GROUP BY 1, 2, 3
         """
     )
 
     if not q3_df.empty:
+        q3_df["month_no"] = q3_df["month_name"].map(month_no)
+        q3_df = q3_df[q3_df["month_no"] > 0].copy()
+        q3_df["year"] = q3_df["year"].astype(int).astype(str)
+        q3_df["month"] = q3_df["month_no"].map(lambda m: calendar.month_abbr[m])
+        q3_day_colors = {"Weekday": "#3b82f6", "Weekend": "#f59e0b"}
+
+        # ---- ภาพรวมทุกปีที่เลือก ----
         overall = q3_df.groupby("day_type", as_index=False)[["revenue", "days"]].sum()
         overall["avg_per_day"] = overall["revenue"] / overall["days"].replace(0, np.nan)
+        avg_map = overall.set_index("day_type")["avg_per_day"].to_dict()
 
-        cols = st.columns(len(overall), gap="medium")
-        total_rev_q3 = overall["revenue"].sum()
-        for col, (_, r) in zip(cols, overall.iterrows()):
-            share = r["revenue"] / total_rev_q3 * 100 if total_rev_q3 else 0
-            col.metric(f"{r['day_type']} — รายได้รวม", f"Rp {r['revenue'] / 1e9:,.2f}B",
-                       f"{share:.1f}% | เฉลี่ย Rp {safe_number(r['avg_per_day']) / 1e6:,.1f}M/วัน")
+        m1, m2, m3 = st.columns(3, gap="medium")
+        m1.metric("Weekday — รายได้เฉลี่ย/วัน", f"Rp {safe_number(avg_map.get('Weekday')) / 1e6:,.1f}M")
+        m2.metric("Weekend — รายได้เฉลี่ย/วัน", f"Rp {safe_number(avg_map.get('Weekend')) / 1e6:,.1f}M")
+        wd, we = safe_number(avg_map.get("Weekday")), safe_number(avg_map.get("Weekend"))
+        if wd:
+            m3.metric("Weekend เทียบ Weekday", f"{(we - wd) / wd * 100:+.1f}%")
 
-        col_i, col_j = st.columns(2, gap="large")
-        with col_i:
-            fig_q3a = px.pie(overall, values="revenue", names="day_type", hole=0.5,
-                             color_discrete_sequence=["#3b82f6", "#60a5fa"])
-            fig_q3a.update_traces(textinfo="percent+label")
-            st.plotly_chart(clean_chart(fig_q3a), use_container_width=True)
-        with col_j:
-            q3_df["revenue_b"] = q3_df["revenue"] / 1e9
-            fig_q3b = px.bar(q3_df.sort_values("year"), x="year", y="revenue_b", color="day_type",
-                             barmode="group", text="revenue_b",
-                             color_discrete_sequence=["#3b82f6", "#f59e0b"])
-            fig_q3b.update_traces(texttemplate="%{y:.2f}B", textposition="outside")
-            fig_q3b.update_xaxes(type="category")
-            st.plotly_chart(clean_chart(fig_q3b), use_container_width=True)
-        st.caption("💡 วันธรรมดามี 5 วัน / สัปดาห์ จึงดู 'เฉลี่ยต่อวัน' ประกอบเพื่อเทียบอย่างยุติธรรม")
+        # ---- รายปี ----
+        by_year = q3_df.groupby(["year", "day_type"], as_index=False)[["revenue", "days"]].sum()
+        by_year["avg_m"] = by_year["revenue"] / by_year["days"].replace(0, np.nan) / 1e6
+        st.markdown("**📅 รายได้เฉลี่ยต่อวัน แยกรายปี (Rp ล้าน / วัน)**")
+        fig_q3y = px.bar(by_year.sort_values("year"), x="year", y="avg_m", color="day_type", barmode="group",
+                         text="avg_m", color_discrete_map=q3_day_colors)
+        fig_q3y.update_traces(texttemplate="%{y:,.1f}M", textposition="outside")
+        fig_q3y.update_xaxes(type="category")
+        st.plotly_chart(clean_chart(fig_q3y), use_container_width=True)
+
+        # ---- รายปี → รายเดือน ----
+        by_month = q3_df.copy()
+        by_month["avg_m"] = by_month["revenue"] / by_month["days"].replace(0, np.nan) / 1e6
+        by_month = by_month.sort_values(["year", "month_no"])
+        n_years = by_month["year"].nunique()
+
+        with st.expander("ดูตัวเลขเป็นตาราง (ปี × เดือน)"):
+            tbl = by_month.pivot_table(index=["year", "month_no", "month"], columns="day_type",
+                                       values="avg_m", aggfunc="sum").reset_index()
+            for c in ("Weekday", "Weekend"):
+                if c not in tbl.columns:
+                    tbl[c] = np.nan
+            tbl["Weekend เทียบ Weekday (%)"] = (tbl["Weekend"] - tbl["Weekday"]) / tbl["Weekday"].replace(0, np.nan) * 100
+            tbl = tbl.drop(columns="month_no").rename(columns={
+                "year": "ปี", "month": "เดือน",
+                "Weekday": "Weekday (Rp M/วัน)", "Weekend": "Weekend (Rp M/วัน)"})
+            st.dataframe(tbl.style.format({"Weekday (Rp M/วัน)": "{:,.2f}", "Weekend (Rp M/วัน)": "{:,.2f}",
+                                           "Weekend เทียบ Weekday (%)": "{:+.1f}%"}, na_rep="-"),
+                         hide_index=True, use_container_width=True)
+
+        st.caption("💡 รายได้เฉลี่ยต่อวัน = รายได้รวมของประเภทวัน ÷ จำนวนวันที่มีการจองของประเภทนั้น "
+                   "จึงเทียบ Weekday (5 วัน/สัปดาห์) กับ Weekend (2 วัน/สัปดาห์) ได้อย่างยุติธรรม")
     else:
-        st.info("ไม่พบข้อมูลสัดส่วนวันธรรมดา/วันหยุด")
+        st.info("ไม่พบข้อมูลรายได้วันธรรมดา/วันหยุด")
 
     st.markdown("---")
 
@@ -431,24 +457,16 @@ with tab1:
         fig_q5 = px.bar(q5_df, x="property_name", y="avg_occ", color="year", barmode="group",
                         text="avg_occ", range_y=[0, 110], color_discrete_sequence=px.colors.sequential.Blues[3:])
         fig_q5.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-        occ_target = st.slider("🎯 เป้าหมาย Occupancy (%)", 0, 100, 70, step=5, key="occ_target")
-        fig_q5.add_hline(y=occ_target, line_dash="dash", line_color="#ef4444",
-                         annotation_text=f"เป้าหมาย {occ_target}%", annotation_position="top left")
         st.plotly_chart(clean_chart(fig_q5), use_container_width=True)
-        avg_occ_prop = q5_df.groupby("property_name")["avg_occ"].mean()
-        below = avg_occ_prop[avg_occ_prop < occ_target]
-        if not below.empty:
-            st.caption("⚠️ สาขาที่เฉลี่ยต่ำกว่าเป้า: " + ", ".join(f"{n} ({v:.1f}%)" for n, v in below.items()))
     else:
-        st.info("ไม่พบข้อมูล Occupancy Rate")
-
+        st.info("ไม่พบข้อมูล Occupancy Rate")    
 # =========================================================
 # TAB 2: CUSTOMER ANALYSIS (Q6 - Q9)
 # =========================================================
 
 with tab2:
     # ---------------- Q6 ----------------
-    question_header(6, "สมาชิกแต่ละระดับกลับมาพักซ้ำบ่อยแค่ไหน")
+    question_header(6, "สมาชิกแต่ละระดับกลับมาพักซ้ำกี่ครั้ง")
 
     q6_df = q(
         f"""
@@ -468,27 +486,35 @@ with tab2:
                COUNT(*) AS guests,
                SUM(n) AS bookings,
                SUM(CASE WHEN n > 1 THEN n - 1 ELSE 0 END) AS repeat_stays,
+               SUM(CASE WHEN n > 1 THEN 1 ELSE 0 END) AS repeat_guests,
                SUM(CASE WHEN n > 1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS repeat_guest_pct,
                AVG(n) AS avg_stays
-        FROM gb GROUP BY 1 ORDER BY repeat_guest_pct DESC
+        FROM gb GROUP BY 1 ORDER BY repeat_stays DESC
         """
     )
 
     if not q6_df.empty:
         col_c, col_d = st.columns([1, 1], gap="large")
         with col_c:
-            fig_q6 = px.bar(q6_df, x="loyalty_tier", y="repeat_guest_pct", text="repeat_guest_pct",
-                            color="repeat_guest_pct", color_continuous_scale="Purples")
-            fig_q6.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-            fig_q6.update_layout(coloraxis_showscale=False, title="% ลูกค้าที่กลับมาพักซ้ำ (มากกว่า 1 ครั้ง)")
+            fig_q6 = px.bar(q6_df, x="loyalty_tier", y="repeat_stays", text="repeat_stays",
+                            color="repeat_stays", color_continuous_scale="Purples")
+            fig_q6.update_traces(texttemplate="%{text:,.0f}", textposition="outside")
+            fig_q6.update_layout(
+                coloraxis_showscale=False,
+                title="จำนวนการมาพักซ้ำ (ครั้ง) แยกตามระดับสมาชิก",
+                xaxis_title="ระดับสมาชิก",
+                yaxis_title="จำนวนการพักซ้ำ (ครั้ง)"
+            )
             st.plotly_chart(clean_chart(fig_q6), use_container_width=True)
         with col_d:
             show = q6_df.rename(columns={
                 "loyalty_tier": "ระดับสมาชิก", "guests": "จำนวนลูกค้า", "bookings": "จำนวนการจอง",
-                "repeat_stays": "จำนวนการพักซ้ำ", "repeat_guest_pct": "% ลูกค้าพักซ้ำ", "avg_stays": "พักเฉลี่ย/คน (ครั้ง)"
+                "repeat_stays": "จำนวนการพักซ้ำ (ครั้ง)", "repeat_guests": "ลูกค้าที่พักซ้ำ (คน)",
+                "repeat_guest_pct": "% ลูกค้าพักซ้ำ", "avg_stays": "พักเฉลี่ย/คน (ครั้ง)"
             })
             st.dataframe(
-                show.style.format({"จำนวนลูกค้า": "{:,.0f}", "จำนวนการจอง": "{:,.0f}", "จำนวนการพักซ้ำ": "{:,.0f}",
+                show.style.format({"จำนวนลูกค้า": "{:,.0f}", "จำนวนการจอง": "{:,.0f}",
+                                   "จำนวนการพักซ้ำ (ครั้ง)": "{:,.0f}", "ลูกค้าที่พักซ้ำ (คน)": "{:,.0f}",
                                    "% ลูกค้าพักซ้ำ": "{:.1f}%", "พักเฉลี่ย/คน (ครั้ง)": "{:.2f}"}),
                 use_container_width=True, hide_index=True
             )
@@ -497,7 +523,6 @@ with tab2:
         st.info("ไม่พบข้อมูล Loyalty Tier")
 
     st.markdown("---")
-
     # ---------------- Q7 ----------------
     question_header(7, "ลูกค้า 5 สัญชาติแรกที่พักมากที่สุด มียอดจองกี่รายการ")
 
@@ -542,7 +567,7 @@ with tab2:
                              color_discrete_sequence=px.colors.sequential.Tealgrn[2:])
             fig_q7y.update_layout(title="เปรียบเทียบรายปี")
             st.plotly_chart(clean_chart(fig_q7y), use_container_width=True)
-        st.caption("ไม่รวมสัญชาติที่ระบุเป็น 'Others' / ค่าว่าง")
+        st.caption("ไม่รวมสัญชาติที่ระบุเป็น 'Others'")
     else:
         st.info("ไม่พบข้อมูลสัญชาติลูกค้า")
 
