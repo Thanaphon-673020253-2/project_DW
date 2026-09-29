@@ -482,7 +482,7 @@ with tab2:
         WITH gb AS (
             SELECT CASE WHEN g.loyalty_tier IS NULL OR LOWER(TRIM(g.loyalty_tier)) = 'none'
                         THEN 'Non-Member' ELSE g.loyalty_tier END AS loyalty_tier,
-                   d.year AS stay_year,
+                   d.year AS year,
                    b.guest_key,
                    COUNT(b.booking_id) AS n
             FROM main.fact_hotel_bookings b
@@ -492,55 +492,40 @@ with tab2:
             {where_book} AND b.guest_key IS NOT NULL
             GROUP BY 1, 2, 3
         )
-        SELECT loyalty_tier,
-               stay_year,
+        SELECT loyalty_tier, CAST(year AS VARCHAR) AS year,
                COUNT(*) AS guests,
                SUM(n) AS bookings,
                SUM(CASE WHEN n > 1 THEN n - 1 ELSE 0 END) AS repeat_stays,
-               SUM(CASE WHEN n > 1 THEN 1 ELSE 0 END) AS repeat_guests,
                SUM(CASE WHEN n > 1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS repeat_guest_pct,
                AVG(n) AS avg_stays
-        FROM gb GROUP BY 1, 2 ORDER BY stay_year, repeat_stays DESC
+        FROM gb GROUP BY 1, 2 ORDER BY year, repeat_guest_pct DESC
         """
     )
-
+ 
     if not q6_df.empty:
-        q6_df["stay_year"] = q6_df["stay_year"].astype(int).astype(str)
+        q6_df["year"] = q6_df["year"].astype(str)
+        tier_order = q6_df.groupby("loyalty_tier").apply(
+            lambda g: g["bookings"].sum() / max(g["guests"].sum(), 1)
+        ).sort_values(ascending=False).index.tolist()
 
-        col_c, col_d = st.columns([1, 1], gap="large")
-        with col_c:
-            fig_q6 = px.bar(
-                q6_df, x="loyalty_tier", y="repeat_stays", color="stay_year",
-                barmode="group", text="repeat_stays",
+        fig_q6 = px.bar(
+                q6_df.sort_values("year"), x="loyalty_tier", y="avg_stays", color="year",
+                barmode="group", text="avg_stays", category_orders={"loyalty_tier": tier_order},
                 color_discrete_sequence=px.colors.sequential.Purples_r
             )
-            fig_q6.update_traces(texttemplate="%{text:,.0f}", textposition="outside")
-            fig_q6.update_layout(
-                title="จำนวนการมาพักซ้ำ (ครั้ง) แยกตามระดับสมาชิก และปี",
+        fig_q6.update_traces(texttemplate="%{text:.2f} ครั้ง", textposition="outside")
+        fig_q6.update_layout(
+                title="ค่าเฉลี่ยการเข้าพักซ้ำตามระดับ Loyalty Tier แยกตามปี",
                 xaxis_title="ระดับสมาชิก",
-                yaxis_title="จำนวนการพักซ้ำ (ครั้ง)",
+                yaxis_title="ค่าเฉลี่ยการเข้าพัก (ครั้ง)",
                 legend_title="ปี"
             )
-            st.plotly_chart(clean_chart(fig_q6), use_container_width=True)
-
-        with col_d:
-            pivot = q6_df.pivot_table(
-                index="loyalty_tier", columns="stay_year",
-                values="repeat_stays", aggfunc="sum", fill_value=0
-            )
-            pivot.columns = [f"พักซ้ำปี {c} (ครั้ง)" for c in pivot.columns]
-            pivot = pivot.reset_index().rename(columns={"loyalty_tier": "ระดับสมาชิก"})
-
-            fmt = {c: "{:,.0f}" for c in pivot.columns if c != "ระดับสมาชิก"}
-            st.dataframe(
-                pivot.style.format(fmt),
-                use_container_width=True, hide_index=True
-            )
-        st.caption("จำนวนการพักซ้ำ = จำนวนการจองส่วนที่เกินครั้งแรกของลูกค้าแต่ละคน ในแต่ละปี (นับภายในช่วงที่กรอง)")
+        st.plotly_chart(clean_chart(fig_q6), use_container_width=True)
+        st.caption("ค่าเฉลี่ยการเข้าพัก = จำนวนการจองทั้งหมด ÷ จำนวนลูกค้าที่ไม่ซ้ำกัน ของระดับสมาชิกนั้น ")
     else:
         st.info("ไม่พบข้อมูล Loyalty Tier")
-
-        st.markdown("---")
+ 
+    st.markdown("---")
     # ---------------- Q7 ----------------
     question_header(7, "ลูกค้า 5 สัญชาติแรกที่พักมากที่สุด มียอดจองกี่รายการ")
 
@@ -1202,4 +1187,4 @@ with tab5:
 # =========================================================
 
 st.markdown("---")
-st.caption("Indonesia Hotel Executive Analytics | Supported by AJ.Prem")
+st.caption("Indonesia Hotel Executive Analytics")
