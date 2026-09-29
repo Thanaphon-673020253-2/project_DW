@@ -403,34 +403,43 @@ with tab1:
     question_header(4, "บริการเสริมแต่ละอย่างทำรายได้กี่บาท และมีผู้ใช้บริการกี่คน")
 
     q4_df = q(
-        f"""
-        SELECT 'Food & Beverage' AS service_type, COALESCE(SUM(f.sales_amount), 0) AS revenue, COUNT(DISTINCT f.guest_key) AS guest_count
-        FROM main.fact_fnb_operations f JOIN main.dim_date d ON f.date_key = d.date_key JOIN main.dim_property p ON f.property_key = p.property_key {where_stmt}
-        UNION ALL
-        SELECT 'Spa & Wellness', COALESCE(SUM(a.spa_revenue), 0), COUNT(DISTINCT CASE WHEN a.spa_revenue > 0 THEN a.guest_key END)
-        FROM main.fact_ancillary_services a JOIN main.dim_date d ON a.date_key = d.date_key JOIN main.dim_property p ON a.property_key = p.property_key {where_stmt}
-        UNION ALL
-        SELECT 'Event & Venue', COALESCE(SUM(a.event_revenue), 0), COUNT(CASE WHEN a.event_revenue > 0 THEN 1 END)
-        FROM main.fact_ancillary_services a JOIN main.dim_date d ON a.date_key = d.date_key JOIN main.dim_property p ON a.property_key = p.property_key {where_stmt}
-        ORDER BY revenue DESC
-        """
+    f"""
+    SELECT 'Food & Beverage' AS service_type, CAST(d.year AS VARCHAR) AS year,
+           COALESCE(SUM(f.sales_amount), 0) AS revenue,
+           COUNT(DISTINCT f.guest_key) AS guest_count
+    FROM main.fact_fnb_operations f JOIN main.dim_date d ON f.date_key = d.date_key JOIN main.dim_property p ON f.property_key = p.property_key {where_stmt}
+    GROUP BY 1, 2
+    UNION ALL
+    SELECT 'Spa & Wellness', CAST(d.year AS VARCHAR),
+           COALESCE(SUM(a.spa_revenue), 0),
+           COUNT(DISTINCT CASE WHEN a.spa_revenue > 0 THEN a.guest_key END)
+    FROM main.fact_ancillary_services a JOIN main.dim_date d ON a.date_key = d.date_key JOIN main.dim_property p ON a.property_key = p.property_key {where_stmt}
+    GROUP BY 1, 2
+    UNION ALL
+    SELECT 'Event & Venue', CAST(d.year AS VARCHAR),
+           COALESCE(SUM(a.event_revenue), 0),
+           COUNT(CASE WHEN a.event_revenue > 0 THEN 1 END)
+    FROM main.fact_ancillary_services a JOIN main.dim_date d ON a.date_key = d.date_key JOIN main.dim_property p ON a.property_key = p.property_key {where_stmt}
+    GROUP BY 1, 2
+    """
     )
 
     if not q4_df.empty:
-        q4_df = q4_df.reset_index(drop=True)
+        totals = q4_df.groupby("service_type", as_index=False)[["revenue", "guest_count"]].sum() \
+                    .sort_values("revenue", ascending=False).reset_index(drop=True)
         mcols = st.columns(3, gap="medium")
-        for idx, row in q4_df.iterrows():
+        for idx, row in totals.iterrows():
             if idx >= 3:
                 break
             unit = "งานอีเวนต์" if row["service_type"] == "Event & Venue" else "ผู้ใช้บริการ (ไม่ซ้ำคน)"
-            mcols[idx].metric(f"{row['service_type']}", f"Rp {safe_number(row['revenue']) / 1e9:,.2f}B",
-                              f"{int(safe_number(row['guest_count'])):,} {unit}")
+            mcols[idx].metric(f"{row['service_type']} (รวมทุกปีที่เลือก)", f"Rp {safe_number(row['revenue']) / 1e9:,.2f}B",
+                            f"{int(safe_number(row['guest_count'])):,} {unit}")
 
         q4_df["revenue_b"] = pd.to_numeric(q4_df["revenue"], errors="coerce").fillna(0) / 1e9
-        fig_q4 = px.bar(q4_df, x="service_type", y="revenue_b", text="revenue_b", color="service_type",
-                        color_discrete_sequence=["#2563eb", "#38bdf8", "#93c5fd"])
+        fig_q4 = px.bar(q4_df.sort_values("year"), x="service_type", y="revenue_b", color="year", barmode="group",
+                        text="revenue_b", color_discrete_sequence=px.colors.sequential.Blues[3:])
         fig_q4.update_traces(texttemplate="Rp %{y:.2f}B", textposition="outside")
-        fig_q4.update_layout(showlegend=False)
+        fig_q4.update_layout(title="รายได้บริการเสริม แยกรายปี")
         st.plotly_chart(clean_chart(fig_q4), use_container_width=True)
         st.caption("Event & Venue ไม่มีข้อมูลรายคน จึงนับเป็น 'จำนวนงานที่จัด'")
     else:
@@ -473,6 +482,7 @@ with tab2:
         WITH gb AS (
             SELECT CASE WHEN g.loyalty_tier IS NULL OR LOWER(TRIM(g.loyalty_tier)) = 'none'
                         THEN 'Non-Member' ELSE g.loyalty_tier END AS loyalty_tier,
+                   d.year AS stay_year,
                    b.guest_key,
                    COUNT(b.booking_id) AS n
             FROM main.fact_hotel_bookings b
@@ -480,49 +490,57 @@ with tab2:
             JOIN main.dim_property p ON b.property_key = p.property_key
             JOIN main.dim_date d ON b.date_key = d.date_key
             {where_book} AND b.guest_key IS NOT NULL
-            GROUP BY 1, 2
+            GROUP BY 1, 2, 3
         )
         SELECT loyalty_tier,
+               stay_year,
                COUNT(*) AS guests,
                SUM(n) AS bookings,
                SUM(CASE WHEN n > 1 THEN n - 1 ELSE 0 END) AS repeat_stays,
                SUM(CASE WHEN n > 1 THEN 1 ELSE 0 END) AS repeat_guests,
                SUM(CASE WHEN n > 1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS repeat_guest_pct,
                AVG(n) AS avg_stays
-        FROM gb GROUP BY 1 ORDER BY repeat_stays DESC
+        FROM gb GROUP BY 1, 2 ORDER BY stay_year, repeat_stays DESC
         """
     )
 
     if not q6_df.empty:
+        q6_df["stay_year"] = q6_df["stay_year"].astype(int).astype(str)
+
         col_c, col_d = st.columns([1, 1], gap="large")
         with col_c:
-            fig_q6 = px.bar(q6_df, x="loyalty_tier", y="repeat_stays", text="repeat_stays",
-                            color="repeat_stays", color_continuous_scale="Purples")
+            fig_q6 = px.bar(
+                q6_df, x="loyalty_tier", y="repeat_stays", color="stay_year",
+                barmode="group", text="repeat_stays",
+                color_discrete_sequence=px.colors.sequential.Purples_r
+            )
             fig_q6.update_traces(texttemplate="%{text:,.0f}", textposition="outside")
             fig_q6.update_layout(
-                coloraxis_showscale=False,
-                title="จำนวนการมาพักซ้ำ (ครั้ง) แยกตามระดับสมาชิก",
+                title="จำนวนการมาพักซ้ำ (ครั้ง) แยกตามระดับสมาชิก และปี",
                 xaxis_title="ระดับสมาชิก",
-                yaxis_title="จำนวนการพักซ้ำ (ครั้ง)"
+                yaxis_title="จำนวนการพักซ้ำ (ครั้ง)",
+                legend_title="ปี"
             )
             st.plotly_chart(clean_chart(fig_q6), use_container_width=True)
+
         with col_d:
-            show = q6_df.rename(columns={
-                "loyalty_tier": "ระดับสมาชิก", "guests": "จำนวนลูกค้า", "bookings": "จำนวนการจอง",
-                "repeat_stays": "จำนวนการพักซ้ำ (ครั้ง)", "repeat_guests": "ลูกค้าที่พักซ้ำ (คน)",
-                "repeat_guest_pct": "% ลูกค้าพักซ้ำ", "avg_stays": "พักเฉลี่ย/คน (ครั้ง)"
-            })
+            pivot = q6_df.pivot_table(
+                index="loyalty_tier", columns="stay_year",
+                values="repeat_stays", aggfunc="sum", fill_value=0
+            )
+            pivot.columns = [f"พักซ้ำปี {c} (ครั้ง)" for c in pivot.columns]
+            pivot = pivot.reset_index().rename(columns={"loyalty_tier": "ระดับสมาชิก"})
+
+            fmt = {c: "{:,.0f}" for c in pivot.columns if c != "ระดับสมาชิก"}
             st.dataframe(
-                show.style.format({"จำนวนลูกค้า": "{:,.0f}", "จำนวนการจอง": "{:,.0f}",
-                                   "จำนวนการพักซ้ำ (ครั้ง)": "{:,.0f}", "ลูกค้าที่พักซ้ำ (คน)": "{:,.0f}",
-                                   "% ลูกค้าพักซ้ำ": "{:.1f}%", "พักเฉลี่ย/คน (ครั้ง)": "{:.2f}"}),
+                pivot.style.format(fmt),
                 use_container_width=True, hide_index=True
             )
-        st.caption("จำนวนการพักซ้ำ = จำนวนการจองส่วนที่เกินครั้งแรกของลูกค้าแต่ละคน (นับภายในช่วงที่กรอง)")
+        st.caption("จำนวนการพักซ้ำ = จำนวนการจองส่วนที่เกินครั้งแรกของลูกค้าแต่ละคน ในแต่ละปี (นับภายในช่วงที่กรอง)")
     else:
         st.info("ไม่พบข้อมูล Loyalty Tier")
 
-    st.markdown("---")
+        st.markdown("---")
     # ---------------- Q7 ----------------
     question_header(7, "ลูกค้า 5 สัญชาติแรกที่พักมากที่สุด มียอดจองกี่รายการ")
 
@@ -674,24 +692,25 @@ with tab3:
     question_header(11, "ห้องพักแต่ละแบบทำรายได้กี่บาท")
 
     q11_df = q(
-        f"""
-        SELECT COALESCE(r.room_type, b.room_type, 'Unknown') AS room_type,
-               COUNT(b.booking_id) AS bookings,
-               COALESCE(SUM(b.total_revenue), 0) / 1e9 AS revenue_b
-        FROM main.fact_hotel_bookings b
-        LEFT JOIN main.dim_room r ON b.room_key = r.room_key
-        JOIN main.dim_property p ON b.property_key = p.property_key
-        JOIN main.dim_date d ON b.date_key = d.date_key
-        {where_book}
-        GROUP BY 1 ORDER BY revenue_b DESC
-        """
+    f"""
+    SELECT COALESCE(r.room_type, b.room_type, 'Unknown') AS room_type,
+           CAST(d.year AS VARCHAR) AS year,
+           COUNT(b.booking_id) AS bookings,
+           COALESCE(SUM(b.total_revenue), 0) / 1e9 AS revenue_b
+    FROM main.fact_hotel_bookings b
+    LEFT JOIN main.dim_room r ON b.room_key = r.room_key
+    JOIN main.dim_property p ON b.property_key = p.property_key
+    JOIN main.dim_date d ON b.date_key = d.date_key
+    {where_book}
+    GROUP BY 1, 2 ORDER BY 2, revenue_b DESC
+    """
     )
 
     if not q11_df.empty and q11_df["revenue_b"].notna().any():
-        fig_q11 = px.bar(q11_df, x="room_type", y="revenue_b", text="bookings",
-                         color="revenue_b", color_continuous_scale="Greens")
-        fig_q11.update_traces(texttemplate="Rp %{y:.2f}B (%{text:,} จอง)", textposition="outside")
-        fig_q11.update_layout(coloraxis_showscale=False)
+        fig_q11 = px.bar(q11_df.sort_values("year"), x="room_type", y="revenue_b", color="year", barmode="group",
+                        text="bookings", color_discrete_sequence=px.colors.sequential.Greens[3:])
+        fig_q11.update_traces(texttemplate="%{text:,} จอง", textposition="outside")
+        fig_q11.update_yaxes(title="รายได้ (Rp พันล้าน)")
         st.plotly_chart(clean_chart(fig_q11), use_container_width=True)
     else:
         st.warning("⚠️ ไม่พบข้อมูลประเภทห้องพักตามเงื่อนไขที่เลือก")
@@ -703,32 +722,29 @@ with tab3:
 
     # ใช้ where_stmt (นับทุกการจอง) เพราะต้องมีตัวหารเป็นยอดจองทั้งหมด
     q12_df = q(
-        f"""
-        SELECT COALESCE(r.room_type, b.room_type, 'Unknown') AS room_type,
-               COUNT(*) AS total_bookings,
-               SUM(CAST(b.is_canceled AS INTEGER)) AS canceled,
-               AVG(CAST(b.is_canceled AS INTEGER)) * 100 AS cancel_rate
-        FROM main.fact_hotel_bookings b
-        LEFT JOIN main.dim_room r ON b.room_key = r.room_key
-        JOIN main.dim_property p ON b.property_key = p.property_key
-        JOIN main.dim_date d ON b.date_key = d.date_key
-        {where_stmt}
-        GROUP BY 1 ORDER BY cancel_rate DESC
-        """
+    f"""
+    SELECT COALESCE(r.room_type, b.room_type, 'Unknown') AS room_type,
+           CAST(d.year AS VARCHAR) AS year,
+           COUNT(*) AS total_bookings,
+           SUM(CAST(b.is_canceled AS INTEGER)) AS canceled,
+           AVG(CAST(b.is_canceled AS INTEGER)) * 100 AS cancel_rate
+    FROM main.fact_hotel_bookings b
+    LEFT JOIN main.dim_room r ON b.room_key = r.room_key
+    JOIN main.dim_property p ON b.property_key = p.property_key
+    JOIN main.dim_date d ON b.date_key = d.date_key
+    {where_stmt}
+    GROUP BY 1, 2 ORDER BY 2, cancel_rate DESC
+    """
     )
 
     if not q12_df.empty and q12_df["cancel_rate"].notna().any():
-        fig_q12 = px.bar(q12_df, x="room_type", y="cancel_rate", text="cancel_rate",
-                         color="cancel_rate", color_continuous_scale="Reds",
-                         custom_data=["canceled", "total_bookings"])
+        fig_q12 = px.bar(q12_df.sort_values("year"), x="room_type", y="cancel_rate", color="year", barmode="group",
+                        text="cancel_rate", color_discrete_sequence=px.colors.sequential.Reds[3:],
+                        custom_data=["canceled", "total_bookings"])
         fig_q12.update_traces(
             texttemplate="%{text:.1f}%", textposition="outside",
             hovertemplate="%{x}<br>ยกเลิก %{customdata[0]:,} / %{customdata[1]:,} การจอง<extra></extra>"
         )
-        fig_q12.update_layout(coloraxis_showscale=False)
-        overall_cancel = q12_df["canceled"].sum() / max(q12_df["total_bookings"].sum(), 1) * 100
-        fig_q12.add_hline(y=overall_cancel, line_dash="dash", line_color="#6b7280",
-                          annotation_text=f"เฉลี่ยรวม {overall_cancel:.1f}%", annotation_position="top left")
         st.plotly_chart(clean_chart(fig_q12), use_container_width=True)
     else:
         st.warning("⚠️ ไม่พบข้อมูลอัตราการยกเลิกตามเงื่อนไขที่เลือก")
@@ -774,40 +790,43 @@ with tab4:
 
     # ---------------- Q14 + Q15 ----------------
     q_event = q(
-        f"""
-        SELECT COALESCE(e.event_type_name, 'Unknown') AS event_type,
-               COUNT(*) AS total_bookings,
-               COALESCE(SUM(a.event_revenue), 0) / 1e9 AS rev_billions
-        FROM main.fact_ancillary_services a
-        LEFT JOIN main.dim_event_type e ON a.event_type_key = e.event_type_key
-        JOIN main.dim_date d ON a.date_key = d.date_key
-        JOIN main.dim_property p ON a.property_key = p.property_key
-        {where_stmt} AND a.event_revenue > 0
-        GROUP BY 1
-        """
+    f"""
+    SELECT COALESCE(e.event_type_name, 'Unknown') AS event_type,
+           CAST(d.year AS VARCHAR) AS year,
+           COUNT(*) AS total_bookings,
+           COALESCE(SUM(a.event_revenue), 0) / 1e9 AS rev_billions
+    FROM main.fact_ancillary_services a
+    LEFT JOIN main.dim_event_type e ON a.event_type_key = e.event_type_key
+    JOIN main.dim_date d ON a.date_key = d.date_key
+    JOIN main.dim_property p ON a.property_key = p.property_key
+    {where_stmt} AND a.event_revenue > 0
+    GROUP BY 1, 2
+    """
     )
 
     if not q_event.empty:
         col_m, col_n = st.columns(2, gap="large")
+        order14 = q_event.groupby("event_type")["total_bookings"].sum().sort_values(ascending=False).index.tolist()
+        order15 = q_event.groupby("event_type")["rev_billions"].sum().sort_values(ascending=False).index.tolist()
 
         with col_m:
             question_header(14, "กิจกรรมแต่ละประเภทถูกจัดทั้งหมดกี่ครั้ง")
-            d14 = q_event.sort_values("total_bookings", ascending=False)
-            fig14 = px.bar(d14, x="event_type", y="total_bookings", text="total_bookings",
-                           color="total_bookings", color_continuous_scale="Blues")
-            fig14.update_traces(texttemplate="%{text:,} ครั้ง", textposition="outside")
-            fig14.update_layout(coloraxis_showscale=False)
+            fig14 = px.bar(q_event.sort_values("year"), x="event_type", y="total_bookings", color="year",
+                        barmode="group", text="total_bookings", category_orders={"event_type": order14},
+                        color_discrete_sequence=px.colors.sequential.Blues[3:])
+            fig14.update_traces(texttemplate="%{text:,}", textposition="outside")
             st.plotly_chart(clean_chart(fig14), use_container_width=True)
 
         with col_n:
             question_header(15, "กิจกรรมประเภทใดทำรายได้มากที่สุด")
-            d15 = q_event.sort_values("rev_billions", ascending=False)
-            top = d15.iloc[0]
-            st.metric("🏆 รายได้สูงสุด", str(top["event_type"]), f"Rp {top['rev_billions']:,.2f}B")
-            fig15 = px.bar(d15, x="event_type", y="rev_billions", text="rev_billions",
-                           color="rev_billions", color_continuous_scale="YlGnBu")
-            fig15.update_traces(texttemplate="Rp %{y:.2f}B", textposition="outside")
-            fig15.update_layout(coloraxis_showscale=False)
+            totals15 = q_event.groupby("event_type", as_index=False)["rev_billions"].sum() \
+                            .sort_values("rev_billions", ascending=False)
+            top = totals15.iloc[0]
+            st.metric("🏆 รายได้สูงสุด (รวมทุกปีที่เลือก)", str(top["event_type"]), f"Rp {top['rev_billions']:,.2f}B")
+            fig15 = px.bar(q_event.sort_values("year"), x="event_type", y="rev_billions", color="year",
+                        barmode="group", text="rev_billions", category_orders={"event_type": order15},
+                        color_discrete_sequence=px.colors.sequential.YlGnBu[3:])
+            fig15.update_traces(texttemplate="%{y:.2f}B", textposition="outside")
             st.plotly_chart(clean_chart(fig15), use_container_width=True)
     else:
         st.info("ไม่พบข้อมูลประเภทกิจกรรมจัดงานตามเงื่อนไข")
