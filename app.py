@@ -789,11 +789,38 @@ with tab4:
     st.markdown("---")
 
     # ---------------- Q14 + Q15 ----------------
-    q_event = q(
+    q_event_count = q(
     f"""
     SELECT COALESCE(e.event_type_name, 'Unknown') AS event_type,
            CAST(d.year AS VARCHAR) AS year,
-           COUNT(*) AS total_bookings,
+           COUNT(*) AS total_bookings
+    FROM main.fact_ancillary_services a
+    LEFT JOIN main.dim_event_type e ON a.event_type_key = e.event_type_key
+    JOIN main.dim_date d ON a.date_key = d.date_key
+    JOIN main.dim_property p ON a.property_key = p.property_key
+    {where_stmt} AND a.event_revenue > 0
+    GROUP BY 1, 2
+    """
+)
+
+    question_header(14, "กิจกรรมแต่ละประเภทถูกจัดทั้งหมดกี่ครั้ง")
+    if not q_event_count.empty:
+        order14 = (q_event_count.groupby("event_type")["total_bookings"].sum()
+                .sort_values(ascending=False).index.tolist())
+        fig14 = px.bar(q_event_count.sort_values("year"), x="event_type", y="total_bookings",
+                    color="year", barmode="group", text="total_bookings",
+                    category_orders={"event_type": order14},
+                    color_discrete_sequence=px.colors.sequential.Blues[3:])
+        fig14.update_traces(texttemplate="%{text:,}", textposition="outside")
+        st.plotly_chart(clean_chart(fig14), use_container_width=True)
+    else:
+        st.info("ไม่พบข้อมูลประเภทกิจกรรมจัดงานตามเงื่อนไข")
+    st.markdown("---")
+
+    q_event_rev = q(
+    f"""
+    SELECT COALESCE(e.event_type_name, 'Unknown') AS event_type,
+           CAST(d.year AS VARCHAR) AS year,
            COALESCE(SUM(a.event_revenue), 0) / 1e9 AS rev_billions
     FROM main.fact_ancillary_services a
     LEFT JOIN main.dim_event_type e ON a.event_type_key = e.event_type_key
@@ -804,32 +831,22 @@ with tab4:
     """
     )
 
-    if not q_event.empty:
-        col_m, col_n = st.columns(2, gap="large")
-        order14 = q_event.groupby("event_type")["total_bookings"].sum().sort_values(ascending=False).index.tolist()
-        order15 = q_event.groupby("event_type")["rev_billions"].sum().sort_values(ascending=False).index.tolist()
-
-        with col_m:
-            question_header(14, "กิจกรรมแต่ละประเภทถูกจัดทั้งหมดกี่ครั้ง")
-            fig14 = px.bar(q_event.sort_values("year"), x="event_type", y="total_bookings", color="year",
-                        barmode="group", text="total_bookings", category_orders={"event_type": order14},
-                        color_discrete_sequence=px.colors.sequential.Blues[3:])
-            fig14.update_traces(texttemplate="%{text:,}", textposition="outside")
-            st.plotly_chart(clean_chart(fig14), use_container_width=True)
-
-        with col_n:
-            question_header(15, "กิจกรรมประเภทใดทำรายได้มากที่สุด")
-            totals15 = q_event.groupby("event_type", as_index=False)["rev_billions"].sum() \
-                            .sort_values("rev_billions", ascending=False)
-            top = totals15.iloc[0]
-            st.metric("🏆 รายได้สูงสุด (รวมทุกปีที่เลือก)", str(top["event_type"]), f"Rp {top['rev_billions']:,.2f}B")
-            fig15 = px.bar(q_event.sort_values("year"), x="event_type", y="rev_billions", color="year",
-                        barmode="group", text="rev_billions", category_orders={"event_type": order15},
-                        color_discrete_sequence=px.colors.sequential.YlGnBu[3:])
-            fig15.update_traces(texttemplate="%{y:.2f}B", textposition="outside")
-            st.plotly_chart(clean_chart(fig15), use_container_width=True)
+    question_header(15, "กิจกรรมประเภทใดทำรายได้มากที่สุด")
+    if not q_event_rev.empty:
+        totals15 = (q_event_rev.groupby("event_type", as_index=False)["rev_billions"].sum()
+                    .sort_values("rev_billions", ascending=False))
+        order15 = totals15["event_type"].tolist()
+        top = totals15.iloc[0]
+        st.metric("🏆 รายได้สูงสุด (รวมทุกปีที่เลือก)", str(top["event_type"]),
+                f"Rp {top['rev_billions']:,.2f}B")
+        fig15 = px.bar(q_event_rev.sort_values("year"), x="event_type", y="rev_billions",
+                    color="year", barmode="group", text="rev_billions",
+                    category_orders={"event_type": order15},
+                    color_discrete_sequence=px.colors.sequential.YlGnBu[3:])
+        fig15.update_traces(texttemplate="%{y:.2f}B", textposition="outside")
+        st.plotly_chart(clean_chart(fig15), use_container_width=True)
     else:
-        st.info("ไม่พบข้อมูลประเภทกิจกรรมจัดงานตามเงื่อนไข")
+        st.info("ไม่พบข้อมูลรายได้ประเภทกิจกรรมจัดงานตามเงื่อนไข")   
 
 # =========================================================
 # TAB 5: COMPARISON (เลือกเทียบ ปี-ปี หรือ สาขา-สาขา)
