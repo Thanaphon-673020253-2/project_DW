@@ -758,31 +758,43 @@ with tab4:
     question_header(13, "สถานที่ที่ใช้จัดกิจกรรมแต่ละแบบถูกใช้งานกี่ครั้ง")
 
     q13_df = q(
-        f"""
-        SELECT COALESCE(v.venue_type, 'Unknown') AS venue_type,
-               COALESCE(e.event_type_name, 'Unknown') AS event_type,
-               COUNT(*) AS usage_count
-        FROM main.fact_ancillary_services a
-        LEFT JOIN main.dim_venue v ON a.venue_key = v.venue_key
-        LEFT JOIN main.dim_event_type e ON a.event_type_key = e.event_type_key
-        JOIN main.dim_property p ON a.property_key = p.property_key
-        JOIN main.dim_date d ON a.date_key = d.date_key
-        {where_stmt} AND a.event_revenue > 0
-        GROUP BY 1, 2
-        """
+    f"""
+    SELECT COALESCE(v.venue_type, 'Unknown') AS venue_type,
+           COALESCE(e.event_type_name, 'Unknown') AS event_type,
+           CAST(d.year AS VARCHAR) AS year,
+           COUNT(*) AS usage_count
+    FROM main.fact_ancillary_services a
+    LEFT JOIN main.dim_venue v ON a.venue_key = v.venue_key
+    LEFT JOIN main.dim_event_type e ON a.event_type_key = e.event_type_key
+    JOIN main.dim_property p ON a.property_key = p.property_key
+    JOIN main.dim_date d ON a.date_key = d.date_key
+    {where_stmt} AND a.event_revenue > 0
+    GROUP BY 1, 2, 3
+    """
     )
 
     if not q13_df.empty:
-        order = q13_df.groupby("venue_type")["usage_count"].sum().sort_values(ascending=False)
-        totals = order.reset_index().rename(columns={"usage_count": "total"})
-        fig_q13 = px.bar(q13_df, x="venue_type", y="usage_count", color="event_type", barmode="stack",
-                         category_orders={"venue_type": order.index.tolist()},
-                         color_discrete_sequence=px.colors.qualitative.Set2)
+        order = q13_df.groupby("venue_type")["usage_count"].sum().sort_values(ascending=False).index.tolist()
+
+        st.markdown("**สัดส่วนประเภทกิจกรรมต่อสถานที่ (รวมทุกปีที่เลือก)**")
+        stacked = q13_df.groupby(["venue_type", "event_type"], as_index=False)["usage_count"].sum()
+        totals = stacked.groupby("venue_type", as_index=False)["usage_count"].sum()
+        fig_q13a = px.bar(stacked, x="venue_type", y="usage_count", color="event_type", barmode="stack",
+                        category_orders={"venue_type": order}, color_discrete_sequence=px.colors.qualitative.Set2)
         for _, r in totals.iterrows():
-            fig_q13.add_annotation(x=r["venue_type"], y=r["total"], text=f"{int(r['total']):,} ครั้ง",
-                                   showarrow=False, yshift=12)
-        st.plotly_chart(clean_chart(fig_q13), use_container_width=True)
-        st.caption("แท่งซ้อนแสดงว่าแต่ละสถานที่ถูกใช้จัดกิจกรรมประเภทใดบ้าง (นับเฉพาะรายการที่มีรายได้จากอีเวนต์)")
+            fig_q13a.add_annotation(x=r["venue_type"], y=r["usage_count"], text=f"{int(r['usage_count']):,} ครั้ง",
+                                    showarrow=False, yshift=12)
+        st.plotly_chart(clean_chart(fig_q13a), use_container_width=True)
+
+        st.markdown("**แนวโน้มการใช้สถานที่รายปี**")
+        yearly = q13_df.groupby(["venue_type", "year"], as_index=False)["usage_count"].sum().sort_values("year")
+        fig_q13b = px.bar(yearly, x="venue_type", y="usage_count", color="year", barmode="group",
+                        category_orders={"venue_type": order}, text="usage_count",
+                        color_discrete_sequence=px.colors.sequential.Viridis[2:])
+        fig_q13b.update_traces(texttemplate="%{text:,}", textposition="outside")
+        st.plotly_chart(clean_chart(fig_q13b), use_container_width=True)
+        st.caption("แท่งซ้อน = สัดส่วนประเภทกิจกรรมรวมทุกปีที่เลือก · แท่งกลุ่ม = จำนวนครั้งใช้งานรายปี "
+                "(นับเฉพาะรายการที่มีรายได้จากอีเวนต์)")
     else:
         st.info("ไม่พบข้อมูลการใช้สถานที่")
 
