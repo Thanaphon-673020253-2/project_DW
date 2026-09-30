@@ -2,6 +2,8 @@ import calendar
 import os
 import subprocess
 from functools import reduce
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
 
 import duckdb
 import numpy as np
@@ -74,12 +76,12 @@ def month_no(name):
 
 
 def clean_chart(fig):
-    """ทำให้กราฟโปร่งใส กลมกลืนกับทั้ง Light / Dark theme"""
+    """ทำให้กราฟโปร่งใส กลมกลืนกับทั้ง Light / Dark theme (ไม่ลบชื่อแกน X/Y ที่ตั้งไว้ก่อนหน้า)"""
     fig.update_layout(
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(showgrid=False, title=""),
-        yaxis=dict(showgrid=True, gridcolor="rgba(128,128,128,0.15)", title=""),
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=True, gridcolor="rgba(128,128,128,0.15)"),
         margin=dict(t=40, b=20, l=20, r=20),
         font=dict(family="Inter, sans-serif", size=12),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None)
@@ -101,7 +103,7 @@ def safe_number(value, default=0):
 
 
 def question_header(no, text):
-    st.markdown(f"#### Q{no}. {text}")
+    st.markdown(f"#### {no}. {text}")
 
 
 # =========================================================
@@ -233,37 +235,70 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 
 with tab1:
     # ---------------- Q1 ----------------
-    question_header(1, "โรงแรมทั้งหมดทำรายได้รวมเท่าไร และขายห้องพักได้กี่คืน")
+    question_header(1, "โรงแรมแต่ละสาขาทำรายได้รวมเท่าไร และขายห้องพักได้กี่คืน")
 
     q1_df = q(
         f"""
-        SELECT p.property_name,
-               COALESCE(SUM(b.total_revenue), 0) AS revenue,
-               COALESCE(SUM(b.nights), 0) AS nights
+        SELECT p.property_name, CAST(d.year AS VARCHAR) AS year,
+            COALESCE(SUM(b.total_revenue), 0) AS revenue,
+            COALESCE(SUM(b.nights), 0) AS nights
         FROM main.fact_hotel_bookings b
         JOIN main.dim_date d ON b.date_key = d.date_key
         JOIN main.dim_property p ON b.property_key = p.property_key
         {where_book}
-        GROUP BY 1 ORDER BY revenue DESC
+        GROUP BY 1, 2
         """
     )
 
     if not q1_df.empty:
-        c1, c2 = st.columns(2, gap="medium")
-        c1.metric("ยอดขายรวม (Total Revenue)", f"Rp {q1_df['revenue'].sum() / 1e9:,.2f}B")
-        c2.metric("จำนวนคืนที่ขายได้ (Nights)", f"{q1_df['nights'].sum():,.0f} คืน")
+        totals1 = q1_df.groupby("property_name", as_index=False)[["revenue", "nights"]].sum() \
+                        .sort_values("revenue", ascending=False)
 
+        c1, c2 = st.columns(2, gap="medium")
+        c1.metric("ยอดขายรวม (ทุกสาขา, ทุกปีที่เลือก)", f"Rp {totals1['revenue'].sum() / 1e9:,.2f}B")
+        c2.metric("จำนวนคืนที่ขายได้ (ทุกสาขา, ทุกปีที่เลือก)", f"{totals1['nights'].sum():,.0f} คืน")
+
+        order1 = totals1["property_name"].tolist()
         q1_df["revenue_b"] = q1_df["revenue"] / 1e9
-        tot_q1 = q1_df["revenue"].sum()
-        q1_df["share"] = q1_df["revenue"] / tot_q1 * 100 if tot_q1 else 0
-        q1_df["label"] = q1_df.apply(
-            lambda r: f"Rp {r['revenue_b']:,.2f}B ({r['share']:.1f}%) · {r['nights']:,.0f} คืน", axis=1)
-        fig_q1 = px.bar(q1_df.sort_values("revenue_b"), x="revenue_b", y="property_name", orientation="h",
-                        text="label", color_discrete_sequence=["#2563eb"])
-        fig_q1.update_traces(textposition="outside", cliponaxis=False)
-        fig_q1.update_xaxes(range=[0, q1_df["revenue_b"].max() * 1.45])
-        st.markdown("**รายได้และจำนวนคืนพักรายสาขา (เรียงจากมากไปน้อย, แสดงสัดส่วนของรายได้รวม)**")
-        st.plotly_chart(clean_chart(fig_q1), use_container_width=True)
+        q1_sorted = q1_df.sort_values("year")
+        blues = px.colors.sequential.Blues[3:]
+
+        # ---------- กราฟที่ 1: รายได้ ----------
+        st.markdown("**💰 รายได้รายสาขา แยกตามปี**")
+        fig_q1_rev = px.bar(
+            q1_sorted, x="revenue_b", y="property_name", color="year",
+            orientation="h", barmode="group", text="revenue_b",
+            category_orders={"property_name": order1},
+            color_discrete_sequence=blues
+        )
+        fig_q1_rev.update_traces(texttemplate="Rp %{text:,.2f}B", textposition="outside", cliponaxis=False)
+        fig_q1_rev.update_xaxes(title="รายได้ (Rp พันล้าน)")
+        fig_q1_rev.update_yaxes(title="สาขา", autorange="reversed")
+        fig_q1_rev.update_layout(height=520)
+        st.plotly_chart(clean_chart(fig_q1_rev), use_container_width=True)
+
+        # ---------- กราฟที่ 2: จำนวนคืนที่ขายได้ ----------
+        st.markdown("**🛏️ จำนวนคืนที่ขายได้รายสาขา แยกตามปี**")
+        fig_q1_night = px.bar(
+            q1_sorted, x="nights", y="property_name", color="year",
+            orientation="h", barmode="group", text="nights",
+            category_orders={"property_name": order1},
+            color_discrete_sequence=blues
+        )
+        fig_q1_night.update_traces(texttemplate="%{text:,.0f} คืน", textposition="outside", cliponaxis=False)
+        fig_q1_night.update_xaxes(title="จำนวนคืนที่ขายได้ (คืน)")
+        fig_q1_night.update_yaxes(title="สาขา", autorange="reversed")
+        fig_q1_night.update_layout(height=520)
+        st.plotly_chart(clean_chart(fig_q1_night), use_container_width=True)
+
+        st.caption("⚠️ ปีที่ข้อมูลไม่ครบ 12 เดือนจะมียอดรวมต่ำกว่าความเป็นจริง")
+
+        with st.expander("ดูตัวเลขรายได้ (Rp) และจำนวนคืนเป็นตาราง"):
+            tbl1 = q1_df.pivot_table(index="property_name", columns="year",
+                                    values=["revenue_b", "nights"], aggfunc="sum").reindex(order1)
+            tbl1.columns = [f"{'รายได้ (Rp พันล้าน)' if c[0] == 'revenue_b' else 'คืนที่ขายได้'} ปี {c[1]}"
+                        for c in tbl1.columns]
+            st.dataframe(tbl1.style.format("{:,.2f}"), use_container_width=True)
     else:
         st.info("ไม่พบข้อมูลรายได้")
 
@@ -302,24 +337,26 @@ with tab1:
         fig_q2 = px.line(q2_df, x="month", y="revenue_b", color="year", markers=True,
                          category_orders={"month": MONTH_LABELS})
         fig_q2.update_traces(line_width=3, marker_size=7)
+        fig_q2.update_xaxes(title="เดือน")
         fig_q2.update_yaxes(title="รายได้ (Rp พันล้าน)")
         st.plotly_chart(clean_chart(fig_q2), use_container_width=True)
 
-        st.markdown("**🗓️ Heatmap รายได้ ปี × เดือน (สีเข้ม = รายได้สูง)**")
+        st.markdown("**🗓️ Heatmap รายได้(Rp พันล้าน) เทียบปี × เดือน**")
         heat = q2_df.pivot_table(index="year", columns="month_no", values="revenue_b", aggfunc="sum") \
                     .reindex(columns=range(1, 13))
         heat_text = np.where(np.isnan(heat.values), "", np.round(heat.values, 2).astype(str))
         fig_heat = px.imshow(heat.values, x=MONTH_LABELS, y=heat.index.tolist(), aspect="auto",
                              color_continuous_scale="YlOrRd")
         fig_heat.update_traces(text=heat_text, texttemplate="%{text}")
-        fig_heat.update_layout(coloraxis_showscale=False)
+        fig_heat.update_xaxes(title="เดือน")
+        fig_heat.update_yaxes(title="ปี")
         st.plotly_chart(clean_chart(fig_heat), use_container_width=True)
 
         months_per_year = q2_df.groupby("year")["month_no"].nunique()
         partial = [f"{y} ({n} เดือน)" for y, n in months_per_year.items() if n < 12]
         if partial:
             st.caption("⚠️ ปีที่มีข้อมูลไม่ครบ 12 เดือน: " + ", ".join(partial) +
-                       " — ควรระวังเมื่อเทียบภาพรวมรายปี")
+                       "เนื่องจากการจองยังไม่เกิดขึ้นในอนาคต หรือข้อมูลยังไม่ถูกอัปเดต")
     else:
         st.info("ไม่พบข้อมูลแนวโน้มรายได้")
 
@@ -369,7 +406,8 @@ with tab1:
         fig_q3y = px.bar(by_year.sort_values("year"), x="year", y="avg_m", color="day_type", barmode="group",
                          text="avg_m", color_discrete_map=q3_day_colors)
         fig_q3y.update_traces(texttemplate="%{y:,.1f}M", textposition="outside")
-        fig_q3y.update_xaxes(type="category")
+        fig_q3y.update_xaxes(type="category", title="ปี")
+        fig_q3y.update_yaxes(title="รายได้เฉลี่ยต่อวัน (Rp ล้าน)")
         st.plotly_chart(clean_chart(fig_q3y), use_container_width=True)
 
         # ---- รายปี → รายเดือน ----
@@ -392,8 +430,7 @@ with tab1:
                                            "Weekend เทียบ Weekday (%)": "{:+.1f}%"}, na_rep="-"),
                          hide_index=True, use_container_width=True)
 
-        st.caption("💡 รายได้เฉลี่ยต่อวัน = รายได้รวมของประเภทวัน ÷ จำนวนวันที่มีการจองของประเภทนั้น "
-                   "จึงเทียบ Weekday (5 วัน/สัปดาห์) กับ Weekend (2 วัน/สัปดาห์) ได้อย่างยุติธรรม")
+        st.caption("💡 รายได้เฉลี่ยต่อวัน = รายได้รวมของประเภทวัน ÷ จำนวนวันที่มีการจองของประเภทนั้น ")
     else:
         st.info("ไม่พบข้อมูลรายได้วันธรรมดา/วันหยุด")
 
@@ -439,7 +476,8 @@ with tab1:
         fig_q4 = px.bar(q4_df.sort_values("year"), x="service_type", y="revenue_b", color="year", barmode="group",
                         text="revenue_b", color_discrete_sequence=px.colors.sequential.Blues[3:])
         fig_q4.update_traces(texttemplate="Rp %{y:.2f}B", textposition="outside")
-        fig_q4.update_layout(title="รายได้บริการเสริม แยกรายปี")
+        fig_q4.update_xaxes(title="ประเภทบริการเสริม")
+        fig_q4.update_yaxes(title="รายได้ (Rp พันล้าน)")
         st.plotly_chart(clean_chart(fig_q4), use_container_width=True)
         st.caption("Event & Venue ไม่มีข้อมูลรายคน จึงนับเป็น 'จำนวนงานที่จัด'")
     else:
@@ -448,7 +486,7 @@ with tab1:
     st.markdown("---")
 
     # ---------------- Q5 ----------------
-    question_header(5, "ห้องพักของแต่ละสาขาถูกจองกี่ % เมื่อเทียบกับจำนวนห้องทั้งหมด (Occupancy)")
+    question_header(5, "ห้องพักแต่ละสาขาถูกจองเป็นกี่ % เมื่อเทียบกับจำนวนห้องของแต่ละสาขา (Occupancy)")
 
     q5_df = q(
         f"""
@@ -466,7 +504,10 @@ with tab1:
         fig_q5 = px.bar(q5_df, x="property_name", y="avg_occ", color="year", barmode="group",
                         text="avg_occ", range_y=[0, 110], color_discrete_sequence=px.colors.sequential.Blues[3:])
         fig_q5.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+        fig_q5.update_xaxes(title="สาขา")
+        fig_q5.update_yaxes(title="Occupancy %")
         st.plotly_chart(clean_chart(fig_q5), use_container_width=True)
+        st.caption("Occupancy % ต่อสาขาคำนวณจากข้อมูลรายวันที่ผูกกับจำนวนห้องของสาขานั้นๆ ")
     else:
         st.info("ไม่พบข้อมูล Occupancy Rate")    
 # =========================================================
@@ -548,8 +589,8 @@ with tab2:
             fig_q7 = px.bar(q7_df, x="bookings", y="nationality", orientation="h", text="bookings",
                             color="bookings", color_continuous_scale="Tealgrn")
             fig_q7.update_traces(texttemplate="%{text:,.0f} รายการ", textposition="outside")
-            fig_q7.update_layout(yaxis=dict(autorange="reversed"), coloraxis_showscale=False,
-                                 title="Top 5 สัญชาติ (รวมทุกปีที่เลือก)")
+            fig_q7.update_xaxes(title="จำนวนการจอง (รายการ)")
+            fig_q7.update_yaxes(title="สัญชาติ")
             st.plotly_chart(clean_chart(fig_q7), use_container_width=True)
 
         with col_b:
@@ -568,7 +609,8 @@ with tab2:
             fig_q7y = px.bar(q7y_df, x="nationality", y="bookings", color="year", barmode="group",
                              category_orders={"nationality": q7_df["nationality"].tolist()},
                              color_discrete_sequence=px.colors.sequential.Tealgrn[2:])
-            fig_q7y.update_layout(title="เปรียบเทียบรายปี")
+            fig_q7y.update_xaxes(title="สัญชาติ")
+            fig_q7y.update_yaxes(title="จำนวนการจอง (รายการ)")
             st.plotly_chart(clean_chart(fig_q7y), use_container_width=True)
         st.caption("ไม่รวมสัญชาติที่ระบุเป็น 'Others'")
     else:
@@ -580,36 +622,38 @@ with tab2:
     question_header(8, "ลูกค้าในประเทศและต่างชาติ ใช้บริการอาหารและสปากี่ครั้ง")
 
     guest_case = ("CASE WHEN g.is_domestic IS NULL THEN 'ไม่ระบุ' "
-                  "WHEN g.is_domestic = TRUE THEN 'ในประเทศ (Domestic)' ELSE 'ต่างชาติ (International)' END")
+                "WHEN g.is_domestic = TRUE THEN 'ในประเทศ (Domestic)' ELSE 'ต่างชาติ (International)' END")
     q8_df = q(
         f"""
         WITH raw_data AS (
-            SELECT 'Food' AS service_type, {guest_case} AS guest_type, COUNT(*) AS service_count
+            SELECT 'Food' AS service_type, CAST(d.year AS VARCHAR) AS year, {guest_case} AS guest_type, COUNT(*) AS service_count
             FROM main.fact_fnb_operations f
             JOIN main.dim_guest g ON f.guest_key = g.guest_key
             JOIN main.dim_date d ON f.date_key = d.date_key
             JOIN main.dim_property p ON f.property_key = p.property_key
-            {where_stmt} AND f.sales_amount > 0 GROUP BY 1, 2
+            {where_stmt} AND f.sales_amount > 0 GROUP BY 1, 2, 3
             UNION ALL
-            SELECT 'Spa', {guest_case}, COUNT(*)
+            SELECT 'Spa', CAST(d.year AS VARCHAR), {guest_case}, COUNT(*)
             FROM main.fact_ancillary_services a
             JOIN main.dim_guest g ON a.guest_key = g.guest_key
             JOIN main.dim_date d ON a.date_key = d.date_key
             JOIN main.dim_property p ON a.property_key = p.property_key
-            {where_stmt} AND a.spa_revenue > 0 GROUP BY 1, 2
+            {where_stmt} AND a.spa_revenue > 0 GROUP BY 1, 2, 3
         )
-        SELECT service_type, guest_type, service_count,
-               service_count * 100.0 / SUM(service_count) OVER (PARTITION BY service_type) AS percentage
+        SELECT service_type, year, guest_type, service_count,
+            service_count * 100.0 / SUM(service_count) OVER (PARTITION BY service_type, year) AS percentage
         FROM raw_data
         """
     )
 
     if not q8_df.empty:
-        fig_q8 = px.bar(q8_df, x="service_type", y="service_count", color="guest_type", barmode="group",
-                        text="service_count", color_discrete_sequence=["#38bdf8", "#fb7185", "#a3a3a3"],
-                        custom_data=["percentage"])
-        fig_q8.update_traces(texttemplate="%{text:,.0f} (%{customdata[0]:.1f}%)", textposition="outside")
+        fig_q8 = px.bar(q8_df.sort_values("year"), x="service_type", y="service_count", color="guest_type",
+                        barmode="group", facet_col="year", text="service_count",
+                        color_discrete_sequence=["#38bdf8", "#fb7185", "#a3a3a3"], custom_data=["percentage"])
+        fig_q8.update_traces(texttemplate="%{text:,.0f} ครั้ง", textposition="outside", cliponaxis=False)
+        fig_q8.for_each_annotation(lambda a: a.update(text=a.text.replace("year=", "ปี ")))
         st.plotly_chart(clean_chart(fig_q8), use_container_width=True)
+        st.caption("แยกแผงย่อยตามปี · ตัวเลขบนแท่งคือจำนวนครั้งที่ใช้บริการของกลุ่มลูกค้านั้นในปีนั้น")
     else:
         st.info("ไม่พบข้อมูลการใช้บริการ Spa และ Food")
 
@@ -632,7 +676,8 @@ with tab2:
     if not q9_df.empty:
         fig_q9 = px.bar(q9_df, x="property_name", y="avg_nights", color="year", barmode="group",
                         text="avg_nights", color_discrete_sequence=px.colors.sequential.Oranges[3:])
-        fig_q9.update_traces(texttemplate="%{text:.2f}", textposition="outside")
+        fig_q9.update_traces(texttemplate="%{text:.2f} คืน", textposition="outside")
+        fig_q9.update_xaxes(title="สาขา")
         fig_q9.update_yaxes(title="คืน / การจอง")
         st.plotly_chart(clean_chart(fig_q9), use_container_width=True)
     else:
@@ -665,7 +710,8 @@ with tab3:
         q10_df["avg_lead"] = q10_df["lead_sum"] / q10_df["lead_cnt"].replace(0, np.nan)
         fig_q10 = px.bar(q10_df, x="property_name", y="avg_lead", color="year", barmode="group",
                          text="avg_lead", color_discrete_sequence=px.colors.sequential.Purp[2:])
-        fig_q10.update_traces(texttemplate="%{text:.1f}", textposition="outside")
+        fig_q10.update_traces(texttemplate="%{text:.1f} วัน", textposition="outside")
+        fig_q10.update_xaxes(title="สาขา")
         fig_q10.update_yaxes(title="วัน")
         st.plotly_chart(clean_chart(fig_q10), use_container_width=True)
     else:
@@ -674,7 +720,7 @@ with tab3:
     st.markdown("---")
 
     # ---------------- Q11 ----------------
-    question_header(11, "ห้องพักแต่ละแบบทำรายได้กี่บาท")
+    question_header(11, "ห้องพักแต่ละแบบทำรายได้เท่าไหร่")
 
     q11_df = q(
     f"""
@@ -692,9 +738,20 @@ with tab3:
     )
 
     if not q11_df.empty and q11_df["revenue_b"].notna().any():
-        fig_q11 = px.bar(q11_df.sort_values("year"), x="room_type", y="revenue_b", color="year", barmode="group",
-                        text="bookings", color_discrete_sequence=px.colors.sequential.Greens[3:])
-        fig_q11.update_traces(texttemplate="%{text:,} จอง", textposition="outside")
+        totals11 = q11_df.groupby("room_type", as_index=False)[["revenue_b", "bookings"]].sum() \
+                        .sort_values("revenue_b", ascending=False)
+        order11 = totals11["room_type"].tolist()
+
+        top11 = totals11.iloc[0]
+        fig_q11 = px.bar(q11_df.sort_values("year"), x="room_type", y="revenue_b", color="year",
+                        barmode="group", text="revenue_b", custom_data=["bookings"],
+                        category_orders={"room_type": order11},
+                        color_discrete_sequence=px.colors.sequential.Greens[3:])
+        fig_q11.update_traces(
+            texttemplate="%{y:.2f} B", textposition="outside", cliponaxis=False,
+            hovertemplate="%{x}<br>รายได้ Rp %{y:.2f}B<br>%{customdata[0]:,} การจอง<extra></extra>"
+        )
+        fig_q11.update_xaxes(title="ประเภทห้องพัก")
         fig_q11.update_yaxes(title="รายได้ (Rp พันล้าน)")
         st.plotly_chart(clean_chart(fig_q11), use_container_width=True)
     else:
@@ -703,23 +760,23 @@ with tab3:
     st.markdown("---")
 
     # ---------------- Q12 ----------------
-    question_header(12, "ห้องพักแต่ละแบบถูกยกเลิกกี่ % เมื่อเทียบกับยอดจองทั้งหมด")
+    question_header(12, "ห้องพักแต่ละแบบถูกยกเลิกกี่ % เมื่อเทียบกับยอดจองห้องพักทุกแบบ ในแต่ละปี")
 
-    # ใช้ where_stmt (นับทุกการจอง) เพราะต้องมีตัวหารเป็นยอดจองทั้งหมด
+# ใช้ where_stmt (นับทุกการจอง) เพราะต้องมีตัวหารเป็นยอดจองทั้งหมดของปีนั้น
     q12_df = q(
-    f"""
-    SELECT COALESCE(r.room_type, b.room_type, 'Unknown') AS room_type,
-           CAST(d.year AS VARCHAR) AS year,
-           COUNT(*) AS total_bookings,
-           SUM(CAST(b.is_canceled AS INTEGER)) AS canceled,
-           AVG(CAST(b.is_canceled AS INTEGER)) * 100 AS cancel_rate
-    FROM main.fact_hotel_bookings b
-    LEFT JOIN main.dim_room r ON b.room_key = r.room_key
-    JOIN main.dim_property p ON b.property_key = p.property_key
-    JOIN main.dim_date d ON b.date_key = d.date_key
-    {where_stmt}
-    GROUP BY 1, 2 ORDER BY 2, cancel_rate DESC
-    """
+        f"""
+        SELECT COALESCE(r.room_type, b.room_type, 'Unknown') AS room_type,
+            CAST(d.year AS VARCHAR) AS year,
+            COUNT(*) AS total_bookings,
+            SUM(CAST(b.is_canceled AS INTEGER)) AS canceled,
+            AVG(CAST(b.is_canceled AS INTEGER)) * 100 AS cancel_rate
+        FROM main.fact_hotel_bookings b
+        LEFT JOIN main.dim_room r ON b.room_key = r.room_key
+        JOIN main.dim_property p ON b.property_key = p.property_key
+        JOIN main.dim_date d ON b.date_key = d.date_key
+        {where_stmt}
+        GROUP BY 1, 2 ORDER BY 2, cancel_rate DESC
+        """
     )
 
     if not q12_df.empty and q12_df["cancel_rate"].notna().any():
@@ -727,10 +784,13 @@ with tab3:
                         text="cancel_rate", color_discrete_sequence=px.colors.sequential.Reds[3:],
                         custom_data=["canceled", "total_bookings"])
         fig_q12.update_traces(
-            texttemplate="%{text:.1f}%", textposition="outside",
+            texttemplate="%{text:.1f} %", textposition="outside",
             hovertemplate="%{x}<br>ยกเลิก %{customdata[0]:,} / %{customdata[1]:,} การจอง<extra></extra>"
         )
+        fig_q12.update_xaxes(title="ประเภทห้องพัก")
+        fig_q12.update_yaxes(title="อัตราการยกเลิก (%)")
         st.plotly_chart(clean_chart(fig_q12), use_container_width=True)
+        st.caption("อัตราการยกเลิก = จำนวนที่ยกเลิก ÷ ยอดจองห้องพักทุกแบบในปีนั้น (ไม่ใช่แค่ยอดจองของห้องประเภทนั้นเอง) × 100")
     else:
         st.warning("⚠️ ไม่พบข้อมูลอัตราการยกเลิกตามเงื่อนไขที่เลือก")
 
@@ -776,7 +836,9 @@ with tab4:
         fig_q13b = px.bar(yearly, x="venue_type", y="usage_count", color="year", barmode="group",
                         category_orders={"venue_type": order}, text="usage_count",
                         color_discrete_sequence=px.colors.sequential.Viridis[2:])
-        fig_q13b.update_traces(texttemplate="%{text:,}", textposition="outside")
+        fig_q13b.update_traces(texttemplate="%{text:,} ครั้ง", textposition="outside")
+        fig_q13a.update_xaxes(title="ประเภทสถานที่")
+        fig_q13a.update_yaxes(title="จำนวนครั้งที่ใช้งาน")
         st.plotly_chart(clean_chart(fig_q13b), use_container_width=True)
         st.caption("แท่งซ้อน = สัดส่วนประเภทกิจกรรมรวมทุกปีที่เลือก · แท่งกลุ่ม = จำนวนครั้งใช้งานรายปี "
                 "(นับเฉพาะรายการที่มีรายได้จากอีเวนต์)")
@@ -808,7 +870,9 @@ with tab4:
                     color="year", barmode="group", text="total_bookings",
                     category_orders={"event_type": order14},
                     color_discrete_sequence=px.colors.sequential.Blues[3:])
-        fig14.update_traces(texttemplate="%{text:,}", textposition="outside")
+        fig14.update_traces(texttemplate="%{text:,} ครั้ง", textposition="outside")
+        fig14.update_xaxes(title="ประเภทกิจกรรม")
+        fig14.update_yaxes(title="จำนวนครั้งที่จัด")
         st.plotly_chart(clean_chart(fig14), use_container_width=True)
     else:
         st.info("ไม่พบข้อมูลประเภทกิจกรรมจัดงานตามเงื่อนไข")
@@ -841,6 +905,8 @@ with tab4:
                     category_orders={"event_type": order15},
                     color_discrete_sequence=px.colors.sequential.YlGnBu[3:])
         fig15.update_traces(texttemplate="%{y:.2f}B", textposition="outside")
+        fig15.update_xaxes(title="ประเภทกิจกรรม")
+        fig15.update_yaxes(title="รายได้ (Rp พันล้าน)")
         st.plotly_chart(clean_chart(fig15), use_container_width=True)
     else:
         st.info("ไม่พบข้อมูลรายได้ประเภทกิจกรรมจัดงานตามเงื่อนไข")   
@@ -848,10 +914,10 @@ with tab4:
 # =========================================================
 # TAB 5: COMPARISON (เลือกเทียบ ปี-ปี หรือ สาขา-สาขา)
 # =========================================================
-
+ 
 SUM_COLS = ["revenue", "nights", "bookings", "lead_sum", "lead_cnt", "all_bookings",
             "canceled", "occ_sum", "occ_cnt", "fnb_rev", "spa_rev", "event_rev"]
-
+ 
 # label -> (คอลัมน์, ชนิดการแสดงผล, ทิศทางที่ "ดี": up / down / neutral)
 METRICS = {
     "รายได้ห้องพักรวม": ("revenue", "money", "up"),
@@ -870,12 +936,12 @@ METRICS = {
 KPI_KEYS = ["รายได้ห้องพักรวม", "จำนวนคืนที่ขายได้", "รายได้เฉลี่ยต่อคืน (ADR)",
             "อัตราการเข้าพัก (Occupancy %)", "อัตราการยกเลิก (%)",
             "รายได้บริการเสริมรวม (F&B + Spa + Event)"]
-
-COLOR_A, COLOR_B = "#94a3b8", "#2563eb"
+ 
+COLOR_A, COLOR_B = "#64748b", "#2563eb"
 STATUS_COLORS = {"ดีขึ้น": "#16a34a", "แย่ลง": "#dc2626", "เท่าเดิม": "#9ca3af",
                  "เพิ่มขึ้น": "#2563eb", "ลดลง": "#f97316"}
-
-
+ 
+ 
 def fmt(v, kind):
     if pd.isna(v):
         return "-"
@@ -888,8 +954,8 @@ def fmt(v, kind):
     if kind == "pct":
         return f"{v:.1f}%"
     return f"{v:,.2f}"
-
-
+ 
+ 
 def change(v_a, v_b, kind):
     """% เปลี่ยนแปลง (สำหรับอัตราส่วน % ใช้ส่วนต่างเป็นจุด pp)"""
     if pd.isna(v_a) or pd.isna(v_b):
@@ -897,22 +963,22 @@ def change(v_a, v_b, kind):
     if kind == "pct":
         return v_b - v_a
     return (v_b - v_a) / v_a * 100 if v_a else np.nan
-
-
+ 
+ 
 def fmt_change(c, kind):
     if pd.isna(c):
         return "-"
     return f"{c:+.1f} pp" if kind == "pct" else f"{c:+.1f}%"
-
-
+ 
+ 
 def status(chg, direction):
     if pd.isna(chg) or chg == 0:
         return "เท่าเดิม"
     if direction == "neutral":
         return "เพิ่มขึ้น" if chg > 0 else "ลดลง"
     return "ดีขึ้น" if (chg > 0) == (direction == "up") else "แย่ลง"
-
-
+ 
+ 
 def aggregate(frame, by):
     g = frame.groupby(by, as_index=False)[SUM_COLS].sum()
     g["adr"] = g["revenue"] / g["nights"].replace(0, np.nan)
@@ -922,13 +988,13 @@ def aggregate(frame, by):
     g["occupancy"] = g["occ_sum"] / g["occ_cnt"].replace(0, np.nan) * OCC_SCALE
     g["ancillary"] = g["fnb_rev"] + g["spa_rev"] + g["event_rev"]
     return g
-
-
+ 
+ 
 @st.cache_data(show_spinner=False)
 def load_monthly(cmp_where, keep_expr):
     """ข้อมูลระดับ ปี-เดือน-สาขา ของทุกตัวชี้วัด (ใช้ทุกปี/ทุกสาขา แล้วค่อยกรองใน pandas)"""
     key_cols = ["year", "month_name", "property"]
-
+ 
     hotel_m = q(
         f"""
         SELECT d.year AS year, d.month_name AS month_name, p.property_name AS property,
@@ -982,37 +1048,86 @@ def load_monthly(cmp_where, keep_expr):
     )
     if hotel_m.empty:
         return hotel_m
-
+ 
     df = reduce(lambda l, r: l.merge(r, on=key_cols, how="outer"), [hotel_m, occ_m, fnb_m, anc_m])
     num_cols = [c for c in df.columns if c not in key_cols]
     df[num_cols] = df[num_cols].fillna(0)
     df["month_no"] = df["month_name"].map(month_no)
     df["year"] = df["year"].astype(int)
     return df
-
-
+ 
+ 
+def ab_badge(label_a, label_b):
+    """แถบป้าย A / B สีตรงกับกราฟ ให้เห็นชัดว่ากำลังเทียบอะไรกับอะไร"""
+    st.markdown(
+        f"<div style='display:flex;align-items:center;gap:10px;margin:4px 0 18px 0;flex-wrap:wrap;'>"
+        f"<span style='background:{COLOR_A};color:#fff;padding:5px 14px;border-radius:8px;"
+        f"font-weight:700;font-size:0.95rem;'>🅰️ A &nbsp;=&nbsp; {label_a}</span>"
+        f"<span style='color:#9ca3af;font-weight:700;font-size:1.1rem;'>VS</span>"
+        f"<span style='background:{COLOR_B};color:#fff;padding:5px 14px;border-radius:8px;"
+        f"font-weight:700;font-size:0.95rem;'>🅱️ B &nbsp;=&nbsp; {label_b}</span>"
+        f"</div>",
+        unsafe_allow_html=True
+    )
+ 
+ 
+def kpi_grid(tot_a, tot_b):
+    """การ์ดสรุป 6 ตัวชี้วัดหลัก โชว์ค่า A และ B คู่กันชัดเจน ไม่ต้องเดาจาก delta"""
+    for row_start in range(0, len(KPI_KEYS), 3):
+        row_keys = KPI_KEYS[row_start:row_start + 3]
+        row_cols = st.columns(len(row_keys), gap="medium")
+        for col, key in zip(row_cols, row_keys):
+            col_name, kind, direction = METRICS[key]
+            va, vb = tot_a[col_name], tot_b[col_name]
+            chg = change(va, vb, kind)
+            stat = status(chg, direction)
+            stat_color = STATUS_COLORS.get(stat, "#6b7280")
+            arrow = "▲" if (not pd.isna(chg) and chg > 0) else ("▼" if (not pd.isna(chg) and chg < 0) else "→")
+            with col:
+                st.markdown(
+                    f"<div style='border:1px solid rgba(128,128,128,0.15);border-radius:12px;padding:14px 16px;"
+                    f"background:rgba(128,128,128,0.04);'>"
+                    f"<div style='font-weight:600;font-size:0.92rem;margin-bottom:8px;'>{key}</div>"
+                    f"<div style='display:flex;justify-content:space-between;align-items:flex-end;'>"
+                    f"<div>"
+                    f"<div style='color:{COLOR_A};font-size:0.75rem;font-weight:700;'>🅰️ A</div>"
+                    f"<div style='font-size:1.15rem;font-weight:700;'>{fmt(va, kind)}</div>"
+                    f"</div>"
+                    f"<div style='text-align:right;'>"
+                    f"<div style='color:{COLOR_B};font-size:0.75rem;font-weight:700;'>🅱️ B</div>"
+                    f"<div style='font-size:1.15rem;font-weight:700;'>{fmt(vb, kind)}</div>"
+                    f"</div>"
+                    f"</div>"
+                    f"<div style='margin-top:8px;color:{stat_color};font-weight:700;font-size:0.9rem;'>"
+                    f"{arrow} {fmt_change(chg, kind)} · {stat}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+        st.write("")
+ 
+ 
 with tab5:
     st.markdown("### 🔄 เปรียบเทียบผลประกอบการ")
     st.caption(
         "เลือกได้เองว่าจะเทียบ 'ปีกับปี' หรือ 'สาขากับสาขา' — หน้านี้ใช้ข้อมูลทุกปี/ทุกสาขา "
         "(ไม่ผูกกับตัวกรองปี/สาขาด้านซ้าย) แต่ยังใช้ตัวกรองฤดูกาลและตัวเลือก 'ไม่นับการจองที่ยกเลิก'"
     )
-
+ 
     cmp_clauses = ["d.year BETWEEN 2023 AND 2026"]
     if selected_seasons and len(selected_seasons) < len(all_seasons):
         cmp_clauses.append("d.season IN (" + ", ".join(f"'{sql_escape(s)}'" for s in selected_seasons) + ")")
     cmp_where = "WHERE " + " AND ".join(cmp_clauses)
-
+ 
     df_all = load_monthly(cmp_where, KEEP_EXPR)
-
+ 
     if df_all.empty:
         st.info("ไม่พบข้อมูลตามเงื่อนไขที่เลือก")
     else:
         years_avail = sorted(int(y) for y in df_all["year"].unique())
         props_avail = sorted(df_all["property"].unique())
-
+ 
         mode = st.radio("รูปแบบการเปรียบเทียบ", ["📅 เทียบปีกับปี", "🏨 เทียบสาขากับสาขา"], horizontal=True)
-
+ 
         # ---------- เลือกสิ่งที่จะเทียบ ----------
         if mode.startswith("📅"):
             c1, c2, c3 = st.columns(3, gap="medium")
@@ -1022,11 +1137,11 @@ with tab5:
                 year_b = st.selectbox("ปีที่ต้องการเทียบ (B)", years_avail, index=len(years_avail) - 1)
             with c3:
                 scope_props = st.multiselect("สาขาที่รวมในการเทียบ", props_avail, default=props_avail)
-
+ 
             scope = df_all[df_all["property"].isin(scope_props or props_avail)]
             df_a = scope[scope["year"] == year_a]
             df_b = scope[scope["year"] == year_b]
-
+ 
             lfl = st.checkbox("เทียบเฉพาะเดือนที่ทั้งสองปีมีข้อมูล (Like-for-like)", value=True,
                               help="ป้องกันการเทียบปีที่ยังไม่จบปีกับปีเต็ม")
             if lfl:
@@ -1035,7 +1150,7 @@ with tab5:
                 df_b = df_b[df_b["month_no"].isin(common)]
                 if common:
                     st.caption("📆 เดือนที่ใช้เปรียบเทียบ: " + ", ".join(calendar.month_abbr[m] for m in sorted(common)))
-
+ 
             label_a, label_b = str(year_a), str(year_b)
             dim, dim_label = "property", "สาขา"
         else:
@@ -1046,46 +1161,38 @@ with tab5:
                 prop_b = st.selectbox("สาขา B", props_avail, index=1 if len(props_avail) > 1 else 0)
             with c3:
                 scope_years = st.multiselect("ปีที่รวมในการเทียบ", years_avail, default=years_avail)
-
+ 
             scope = df_all[df_all["year"].isin(scope_years or years_avail)]
             df_a = scope[scope["property"] == prop_a]
             df_b = scope[scope["property"] == prop_b]
             label_a, label_b = prop_a, prop_b
             dim, dim_label = "year", "ปี"
-
+ 
         name_a, name_b = f"A: {label_a}", f"B: {label_b}"
         color_map = {name_a: COLOR_A, name_b: COLOR_B}
-
+ 
         if df_a.empty or df_b.empty:
             st.warning("ไม่พบข้อมูลของตัวเลือกที่ต้องการเทียบ")
         else:
             if label_a == label_b:
                 st.warning("A และ B เป็นค่าเดียวกัน — ผลเปรียบเทียบจะไม่มีความเปลี่ยนแปลง")
-
+ 
             tot_a = aggregate(df_a.assign(_k=1), ["_k"]).iloc[0]
             tot_b = aggregate(df_b.assign(_k=1), ["_k"]).iloc[0]
-
-            # ---------- 1) Scorecards ----------
-            st.markdown(f"#### 📌 ภาพรวม: {name_b} เทียบกับ {name_a}")
-            card_cols = st.columns(3, gap="medium")
-            for i, key in enumerate(KPI_KEYS):
-                col_name, kind, direction = METRICS[key]
-                va, vb = tot_a[col_name], tot_b[col_name]
-                chg = change(va, vb, kind)
-                delta_color = {"up": "normal", "down": "inverse", "neutral": "off"}[direction]
-                with card_cols[i % 3]:
-                    st.metric(
-                        key, fmt(vb, kind),
-                        None if pd.isna(chg) else f"{fmt_change(chg, kind)} (A: {fmt(va, kind)})",
-                        delta_color=delta_color
-                    )
-
+ 
+            # ---------- 1) ป้าย A/B + Scorecards ----------
+            st.markdown("#### 📌 ภาพรวม 6 ตัวชี้วัดหลัก")
+            ab_badge(label_a, label_b)
+            kpi_grid(tot_a, tot_b)
+ 
             st.markdown("---")
-
+ 
             # ---------- 2) เลือกตัวชี้วัดเชิงลึก ----------
+            st.markdown("#### 🔍 ดูตัวชี้วัดรายละเอียด")
+            ab_badge(label_a, label_b)
             metric_label = st.selectbox("📐 เลือกตัวชี้วัดเพื่อดูรายละเอียด", list(METRICS.keys()), key="cmp_metric")
             col_name, kind, direction = METRICS[metric_label]
-
+ 
             ba = aggregate(df_a, [dim])[[dim, col_name]].rename(columns={col_name: "va"})
             bb = aggregate(df_b, [dim])[[dim, col_name]].rename(columns={col_name: "vb"})
             br = ba.merge(bb, on=dim, how="outer")
@@ -1095,10 +1202,10 @@ with tab5:
             br["status"] = br["chg"].map(lambda c: status(c, direction))
             br["chg_txt"] = br["chg"].map(lambda c: fmt_change(c, kind))
             order = br["dim_s"].tolist()
-
+ 
             # ---------- 3) กราฟเทียบค่า + กราฟส่วนต่าง ----------
             col_l, col_r = st.columns([3, 2], gap="large")
-
+ 
             with col_l:
                 st.markdown(f"**{metric_label} — แยกตาม{dim_label}**")
                 long = pd.concat([
@@ -1113,7 +1220,7 @@ with tab5:
                 fig_l.update_xaxes(type="category")
                 fig_l.update_yaxes(title="Rp พันล้าน" if kind == "money" else "")
                 st.plotly_chart(clean_chart(fig_l), use_container_width=True)
-
+ 
             with col_r:
                 st.markdown(f"**ส่วนต่าง B เทียบ A ({'จุด %' if kind == 'pct' else '%'})**")
                 var_df = br.dropna(subset=["chg"])
@@ -1126,7 +1233,7 @@ with tab5:
                     st.plotly_chart(clean_chart(fig_r), use_container_width=True)
                 else:
                     st.info("ไม่มีข้อมูลเพียงพอสำหรับคำนวณส่วนต่าง")
-
+ 
             # ---------- 4) แนวโน้มรายเดือน A vs B ----------
             st.markdown(f"**แนวโน้มรายเดือน: {metric_label}**")
             trend = pd.concat([
@@ -1141,7 +1248,7 @@ with tab5:
             fig_t.update_traces(line_width=3, marker_size=7)
             fig_t.update_yaxes(title="Rp พันล้าน" if kind == "money" else "")
             st.plotly_chart(clean_chart(fig_t), use_container_width=True)
-
+ 
             # ---------- 5) ตารางรายละเอียด + สรุปอัตโนมัติ ----------
             total_row = {dim_label: "รวม", name_a: fmt(tot_a[col_name], kind), name_b: fmt(tot_b[col_name], kind),
                          "เปลี่ยนแปลง": fmt_change(change(tot_a[col_name], tot_b[col_name], kind), kind),
@@ -1155,7 +1262,7 @@ with tab5:
             })
             st.dataframe(pd.concat([pd.DataFrame([total_row]), body], ignore_index=True),
                          hide_index=True, use_container_width=True)
-
+ 
             valid = br.dropna(subset=["chg"])
             if not valid.empty:
                 hi, lo = valid.loc[valid["chg"].idxmax()], valid.loc[valid["chg"].idxmin()]
@@ -1166,7 +1273,7 @@ with tab5:
                 if direction == "down":
                     msg += " (ตัวชี้วัดนี้ ค่าน้อยกว่า = ดีกว่า)"
                 st.info(msg)
-
+ 
         # ---------- 6) Heatmap ภาพรวมทุกปี × ทุกสาขา ----------
         with st.expander("🗺️ ภาพรวมทุกปี × ทุกสาขา (Heatmap) ตามตัวชี้วัดที่เลือก"):
             m_label = st.session_state.get("cmp_metric", list(METRICS.keys())[0])
@@ -1181,10 +1288,10 @@ with tab5:
             st.plotly_chart(clean_chart(fig_h), use_container_width=True)
             if h_kind in ("money", "int"):
                 st.caption("⚠️ ปีที่ข้อมูลไม่ครบ 12 เดือนจะมีค่ารวมต่ำกว่าความเป็นจริง")
-
+ 
 # =========================================================
 # FOOTER
 # =========================================================
-
+ 
 st.markdown("---")
 st.caption("Indonesia Hotel Executive Analytics")
