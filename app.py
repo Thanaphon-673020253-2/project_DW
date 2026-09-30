@@ -271,7 +271,7 @@ with tab1:
             category_orders={"property_name": order1},
             color_discrete_sequence=blues
         )
-        fig_q1_rev.update_traces(texttemplate="Rp %{text:,.2f}B", textposition="outside", cliponaxis=False)
+        fig_q1_rev.update_traces(texttemplate="Rp %{text:,.2f} B", textposition="outside", cliponaxis=False)
         fig_q1_rev.update_xaxes(title="รายได้ (Rp พันล้าน)")
         fig_q1_rev.update_yaxes(title="สาขา", autorange="reversed")
         fig_q1_rev.update_layout(height=520)
@@ -330,9 +330,9 @@ with tab1:
             peak_m, low_m = int(avg_by_month.idxmax()), int(avg_by_month.idxmin())
             m1, m2 = st.columns(2, gap="medium")
             m1.metric("🔺 เดือน Peak (รายได้เฉลี่ยสูงสุด)", calendar.month_name[peak_m],
-                      f"Rp {avg_by_month[peak_m]:,.2f}B / เดือน")
+                      f"Rp {avg_by_month[peak_m]:,.2f} B / เดือน")
             m2.metric("🔻 เดือน Low (รายได้เฉลี่ยต่ำสุด)", calendar.month_name[low_m],
-                      f"Rp {avg_by_month[low_m]:,.2f}B / เดือน", delta_color="inverse")
+                      f"Rp {avg_by_month[low_m]:,.2f} B / เดือน", delta_color="inverse")
 
         fig_q2 = px.line(q2_df, x="month", y="revenue_b", color="year", markers=True,
                          category_orders={"month": MONTH_LABELS})
@@ -345,11 +345,21 @@ with tab1:
         heat = q2_df.pivot_table(index="year", columns="month_no", values="revenue_b", aggfunc="sum") \
                     .reindex(columns=range(1, 13))
         heat_text = np.where(np.isnan(heat.values), "", np.round(heat.values, 2).astype(str))
-        fig_heat = px.imshow(heat.values, x=MONTH_LABELS, y=heat.index.tolist(), aspect="auto",
+
+        # ป้ายแกน Y: ปีเต็ม = "2024", ปีที่ข้อมูลไม่ครบ = "2023 (6 เดือน)"
+        months_count = heat.notna().sum(axis=1)
+        y_labels = [
+            f"{y}" if n == 12 else f"{y} ({n} เดือน)"
+            for y, n in zip(heat.index, months_count)
+        ]
+
+        fig_heat = px.imshow(heat.values, x=MONTH_LABELS, y=y_labels, aspect="auto",
                              color_continuous_scale="YlOrRd")
-        fig_heat.update_traces(text=heat_text, texttemplate="%{text}")
+        fig_heat.update_traces(text=heat_text, texttemplate="%{text}",
+                               hovertemplate="%{y} · %{x}<br>รายได้ Rp %{z:.2f}B<extra></extra>")
         fig_heat.update_xaxes(title="เดือน")
-        fig_heat.update_yaxes(title="ปี")
+        fig_heat.update_yaxes(type="category", title="ปี")
+        fig_heat.update_layout(coloraxis_showscale=False)
         st.plotly_chart(clean_chart(fig_heat), use_container_width=True)
 
         months_per_year = q2_df.groupby("year")["month_no"].nunique()
@@ -606,12 +616,13 @@ with tab2:
                 GROUP BY 1, 2 ORDER BY 1
                 """
             )
-            fig_q7y = px.bar(q7y_df, x="nationality", y="bookings", color="year", barmode="group",
-                             category_orders={"nationality": q7_df["nationality"].tolist()},
-                             color_discrete_sequence=px.colors.sequential.Tealgrn[2:])
-            fig_q7y.update_xaxes(title="สัญชาติ")
-            fig_q7y.update_yaxes(title="จำนวนการจอง (รายการ)")
-            st.plotly_chart(clean_chart(fig_q7y), use_container_width=True)
+            fig_q7 = px.bar(q7_df, x="bookings", y="nationality", orientation="h", text="bookings",
+                            color="bookings", color_continuous_scale="Tealgrn")
+            fig_q7.update_traces(texttemplate="%{text:,.0f} รายการ", textposition="outside")
+            fig_q7.update_layout(coloraxis_showscale=False)
+            fig_q7.update_xaxes(title="จำนวนการจอง (รายการ)")
+            fig_q7.update_yaxes(title="สัญชาติ", autorange="reversed")
+            st.plotly_chart(clean_chart(fig_q7), use_container_width=True)
         st.caption("ไม่รวมสัญชาติที่ระบุเป็น 'Others'")
     else:
         st.info("ไม่พบข้อมูลสัญชาติลูกค้า")
@@ -647,13 +658,27 @@ with tab2:
     )
 
     if not q8_df.empty:
-        fig_q8 = px.bar(q8_df.sort_values("year"), x="service_type", y="service_count", color="guest_type",
-                        barmode="group", facet_col="year", text="service_count",
-                        color_discrete_sequence=["#38bdf8", "#fb7185", "#a3a3a3"], custom_data=["percentage"])
-        fig_q8.update_traces(texttemplate="%{text:,.0f} ครั้ง", textposition="outside", cliponaxis=False)
-        fig_q8.for_each_annotation(lambda a: a.update(text=a.text.replace("year=", "ปี ")))
+        q8_plot = q8_df.sort_values("year").copy()
+        q8_plot["service_th"] = q8_plot["service_type"].map(
+            {"Food": "อาหาร (Food)", "Spa": "สปา (Spa)"})
+        q8_plot["label"] = q8_plot.apply(
+            lambda r: f"{r['service_count']:,.0f} ครั้ง<br>({r['percentage']:.0f}%)", axis=1)
+
+        fig_q8 = px.bar(
+            q8_plot, x="year", y="service_count", color="guest_type",
+            barmode="group", facet_col="service_th", text="label",
+            color_discrete_sequence=["#38bdf8", "#fb7185", "#a3a3a3"],
+            category_orders={"guest_type": ["ในประเทศ (Domestic)", "ต่างชาติ (International)", "ไม่ระบุ"]},
+            labels={"year": "ปี", "service_count": "จำนวนครั้งที่ใช้บริการ (ครั้ง)", "guest_type": "ประเภทลูกค้า"}
+        )
+        fig_q8.update_traces(textposition="outside", cliponaxis=False, textfont_size=11)
+        fig_q8.update_xaxes(type="category", title="ปี")
+        fig_q8.update_yaxes(matches=None, showticklabels=True)   # แต่ละแผงใช้สเกลของตัวเอง
+        fig_q8.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+        fig_q8.update_layout(height=520, legend_title_text="")
         st.plotly_chart(clean_chart(fig_q8), use_container_width=True)
-        st.caption("แยกแผงย่อยตามปี · ตัวเลขบนแท่งคือจำนวนครั้งที่ใช้บริการของกลุ่มลูกค้านั้นในปีนั้น")
+        st.caption("ตัวเลขบนแท่ง = จำนวนครั้งที่ใช้บริการ (และ % สัดส่วนของกลุ่มลูกค้านั้นในปีเดียวกัน) · "
+                   "แต่ละแผงใช้สเกลแกน Y ของตัวเองเพื่อให้เห็นความต่างของ Spa ชัดเจน")
     else:
         st.info("ไม่พบข้อมูลการใช้บริการ Spa และ Food")
 
@@ -1168,7 +1193,7 @@ with tab5:
             label_a, label_b = prop_a, prop_b
             dim, dim_label = "year", "ปี"
  
-        name_a, name_b = f"A: {label_a}", f"B: {label_b}"
+        name_a, name_b = f"A : {label_a}", f"B : {label_b}"
         color_map = {name_a: COLOR_A, name_b: COLOR_B}
  
         if df_a.empty or df_b.empty:
@@ -1206,6 +1231,15 @@ with tab5:
             # ---------- 3) กราฟเทียบค่า + กราฟส่วนต่าง ----------
             col_l, col_r = st.columns([3, 2], gap="large")
  
+            UNIT_LABEL = {
+                "money": "รายได้ (Rp พันล้าน)",
+                "rp": "บาท/รูเปียห์ ต่อคืน (Rp)",
+                "int": "จำนวน",
+                "pct": "เปอร์เซ็นต์ (%)",
+                "dec": "ค่าเฉลี่ย",
+            }
+            value_axis_title = f"{metric_label} — {UNIT_LABEL[kind]}" if kind != "money" else UNIT_LABEL["money"]
+
             with col_l:
                 st.markdown(f"**{metric_label} — แยกตาม{dim_label}**")
                 long = pd.concat([
@@ -1217,19 +1251,23 @@ with tab5:
                 fig_l = px.bar(long, x="dim_s", y="plot_val", color="series", barmode="group", text="label",
                                color_discrete_map=color_map, category_orders={"dim_s": order})
                 fig_l.update_traces(textposition="outside", cliponaxis=False)
-                fig_l.update_xaxes(type="category")
-                fig_l.update_yaxes(title="Rp พันล้าน" if kind == "money" else "")
+                fig_l.update_xaxes(type="category", title=dim_label)
+                fig_l.update_yaxes(title=value_axis_title)
+                fig_l.update_layout(legend_title_text="")
                 st.plotly_chart(clean_chart(fig_l), use_container_width=True)
- 
+
             with col_r:
-                st.markdown(f"**ส่วนต่าง B เทียบ A ({'จุด %' if kind == 'pct' else '%'})**")
+                unit_chg = "จุดเปอร์เซ็นต์ (pp)" if kind == "pct" else "%"
+                st.markdown(f"**ส่วนต่าง B เทียบ A ({unit_chg})**")
                 var_df = br.dropna(subset=["chg"])
                 if not var_df.empty:
                     fig_r = px.bar(var_df, x="chg", y="dim_s", orientation="h", color="status", text="chg_txt",
                                    color_discrete_map=STATUS_COLORS, category_orders={"dim_s": order})
                     fig_r.update_traces(textposition="outside", cliponaxis=False)
                     fig_r.add_vline(x=0, line_color="gray", line_width=1)
-                    fig_r.update_yaxes(type="category", autorange="reversed")
+                    fig_r.update_xaxes(title=f"การเปลี่ยนแปลง ({unit_chg})")
+                    fig_r.update_yaxes(type="category", autorange="reversed", title=dim_label)
+                    fig_r.update_layout(legend_title_text="สถานะ")
                     st.plotly_chart(clean_chart(fig_r), use_container_width=True)
                 else:
                     st.info("ไม่มีข้อมูลเพียงพอสำหรับคำนวณส่วนต่าง")
