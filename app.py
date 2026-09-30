@@ -116,6 +116,7 @@ def get_connection():
 
     path_in_sub = os.path.join(base_dir, "indohotel", "dev.duckdb")
     path_in_root = os.path.join(base_dir, "dev.duckdb")
+    dbt_cwd = os.path.join(base_dir, "indohotel") if os.path.exists(os.path.join(base_dir, "indohotel", "dbt_project.yml")) else base_dir
 
     db_path = None
     if os.path.exists(path_in_sub):
@@ -123,10 +124,22 @@ def get_connection():
     elif os.path.exists(path_in_root):
         db_path = path_in_root
 
-    if db_path is None:
+    needs_build = db_path is None
+    if db_path is not None:
+        try:
+            check_conn = duckdb.connect(db_path, read_only=True)
+            has_required_model = check_conn.execute(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                "WHERE table_schema = 'main' AND table_name = 'fact_daily_occupancy'"
+            ).fetchone()[0] > 0
+            check_conn.close()
+            needs_build = not has_required_model
+        except Exception:
+            needs_build = True
+
+    if needs_build:
         with st.spinner("⏳ กำลังเตรียมฐานข้อมูลคลังข้อมูล (รัน dbt pipeline ครั้งแรก)..."):
             try:
-                dbt_cwd = os.path.join(base_dir, "indohotel") if os.path.exists(os.path.join(base_dir, "indohotel", "dbt_project.yml")) else base_dir
                 result = subprocess.run(["dbt", "run"], capture_output=True, text=True, cwd=dbt_cwd)
                 if result.returncode != 0:
                     st.error(f"❌ เกิดข้อผิดพลาดในการรัน dbt:\n\n{result.stderr}")
@@ -142,6 +155,16 @@ def get_connection():
             else:
                 os.makedirs(os.path.join(base_dir, "indohotel"), exist_ok=True)
                 db_path = path_in_sub
+
+            check_conn = duckdb.connect(db_path, read_only=True)
+            has_required_model = check_conn.execute(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                "WHERE table_schema = 'main' AND table_name = 'fact_daily_occupancy'"
+            ).fetchone()[0] > 0
+            check_conn.close()
+            if not has_required_model:
+                st.error("❌ dbt รันเสร็จแล้ว แต่ไม่พบตาราง main.fact_daily_occupancy ในฐานข้อมูล")
+                st.stop()
 
     try:
         conn = duckdb.connect(db_path, read_only=True)
